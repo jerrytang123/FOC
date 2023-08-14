@@ -11,13 +11,16 @@
 #include "as5048a.h"
 #include "math_tool.h"
 
+#define ALPHA_VELOCITY_TIME_CONST_US 10000.0f // low pass filter for velocity measurement
+
 extern I2C_HandleTypeDef hi2c1;
 extern TIM_HandleTypeDef htim4;
 
 // µs TIMER
 extern TIM_HandleTypeDef htim6;
 
-typedef struct {
+typedef struct
+{
 
 	e_sensor_type sensor_type;
 
@@ -26,45 +29,46 @@ typedef struct {
 
 	// common sensor values
 	uint16_t lastUpdate;
-    uint16_t last_angle_data;
-    float velocity_deg;
+	uint16_t last_angle_data;
+	float velocity_deg;
 	float velocity_rad;
 
 	float angle_rad;
 	float angle_deg;
 
-    float angle_prev_rad;
-    float angle_prev_deg;
+	float angle_prev_rad;
+	float angle_prev_deg;
 
-    int natural_direction;
-    float full_rotation_offset;
+	int natural_direction;
+	float full_rotation_offset;
 
 } positionSensor_t;
 
-static positionSensor_t* sensor;
+static positionSensor_t *sensor;
 
-positionSensor_t *positionSensor_New(void) {
+positionSensor_t *positionSensor_New(void)
+{
 	positionSensor_t *sensor = (positionSensor_t *)calloc(1, sizeof(positionSensor_t));
-    return sensor;
+	return sensor;
 }
 
 int positionSensor_init(e_sensor_type sensor_type)
 {
 
-	int status=0;
+	int status = 0;
 
 	sensor = positionSensor_New();
 
-	switch(sensor_type)
+	switch (sensor_type)
 	{
 	case AS5600_I2C:
 	{
 		uint16_t angle_data;
 
-		sensor->full_rotation_offset =0;
+		sensor->full_rotation_offset = 0;
 
 		sensor->as5600Handle = AS5600_New();
-		sensor->as5600Handle->i2cHandle=&hi2c1;
+		sensor->as5600Handle->i2cHandle = &hi2c1;
 		AS5600_Init(sensor->as5600Handle);
 
 		AS5600_GetAngle(sensor->as5600Handle, &angle_data);
@@ -77,13 +81,13 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->sensor_type = sensor_type;
 
 		status = 1;
-	    break;
+		break;
 	}
 	case AS5048A_PWM:
 		API_AS5048A_Position_Sensor_Init(&htim4);
 		sensor->sensor_type = sensor_type;
 		status = 1;
-	    break;
+		break;
 	default:
 		status = 0;
 		break;
@@ -93,17 +97,21 @@ int positionSensor_init(e_sensor_type sensor_type)
 
 float positionSensor_getRadiansEstimation(uint16_t time_us)
 {
-	switch(sensor->sensor_type)
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 	{
 		uint16_t delta_t_us;
-		if (time_us <= sensor->lastUpdate) {
-			delta_t_us = 0xffff-sensor->lastUpdate+time_us;
-		}else{
+		if (time_us <= sensor->lastUpdate)
+		{
+			delta_t_us = 0xffff - sensor->lastUpdate + time_us;
+		}
+		else
+		{
 			delta_t_us = (time_us - sensor->lastUpdate);
 		}
-		return sensor->angle_rad + sensor->velocity_rad*(float)(delta_t_us)/1000000.0f;
+		// return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us) / 1000000.0f;
+		return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us + 200) / 1000000.0f; // Slow filter latency is 0.2ms
 	}
 	case AS5048A_PWM:
 		return API_AS5048A_Position_Sensor_Get_Radians_Estimation(time_us);
@@ -114,34 +122,35 @@ float positionSensor_getRadiansEstimation(uint16_t time_us)
 
 //  Shaft angle calculation
 //  angle is in radians [rad]
-void positionSensor_getAngle(void){
-  // raw data from the sensor
-  uint16_t angle_data;
+void positionSensor_getAngle(void)
+{
+	// raw data from the sensor
+	uint16_t angle_data;
 
-  float cpr = pow(2, 12);
-  AS5600_GetAngle(sensor->as5600Handle, &angle_data);
+	float cpr = pow(2, 12);
+	AS5600_GetAngle(sensor->as5600Handle, &angle_data);
 
-  // tracking the number of rotations
-  // in order to expand angle range form [0,2PI]
-  // to basically infinity
-  float d_angle = (float)(angle_data - sensor->last_angle_data);
-  // if overflow happened track it as full rotation
-  if(abs(d_angle) > (0.8*cpr) ) sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
-  // save the current angle value for the next steps
-  // in order to know if overflow happened
-  sensor->last_angle_data = angle_data;
+	// tracking the number of rotations
+	// in order to expand angle range form [0,2PI]
+	// to basically infinity
+	float d_angle = (float)(angle_data - sensor->last_angle_data);
+	// if overflow happened track it as full rotation
+	if (abs(d_angle) > (0.8 * cpr))
+		sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
+	// save the current angle value for the next steps
+	// in order to know if overflow happened
+	sensor->last_angle_data = angle_data;
 
-  // return the full angle
-  // (number of full rotations)*2PI + current sensor angle
-   sensor->angle_rad = sensor->full_rotation_offset + ( (float)angle_data / (float)cpr) * M_2PI;
-   sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
-
+	// return the full angle
+	// (number of full rotations)*2PI + current sensor angle
+	sensor->angle_rad = sensor->full_rotation_offset + ((float)angle_data / (float)cpr) * M_2PI;
+	sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
 }
 
-void positionSensor_update(void){
+void positionSensor_update(void)
+{
 
-
-	switch(sensor->sensor_type)
+	switch (sensor->sensor_type)
 	{
 	// get new data from as5600 sensor
 	case AS5600_I2C:
@@ -153,9 +162,12 @@ void positionSensor_update(void){
 
 		// calculate sample time
 		uint16_t now_us = __HAL_TIM_GET_COUNTER(&htim6);
-		if (now_us <= sensor->lastUpdate) {
-			delta_time_us = 0xffff-sensor->lastUpdate+now_us;
-		}else{
+		if (now_us <= sensor->lastUpdate)
+		{
+			delta_time_us = 0xffff - sensor->lastUpdate + now_us;
+		}
+		else
+		{
 			delta_time_us = (now_us - sensor->lastUpdate);
 		}
 
@@ -167,19 +179,23 @@ void positionSensor_update(void){
 		// to basically infinity
 		d_angle = (float)(angle_data - sensor->last_angle_data);
 		// if overflow happened track it as full rotation
-		if(abs(d_angle) > (0.8*cpr) ) sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
+		if (abs(d_angle) > (0.8 * cpr))
+			sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
 		// save the current angle value for the next steps
 		// in order to know if overflow happened
 		sensor->last_angle_data = angle_data;
 
 		// return the full angle
 		// (number of full rotations)*2PI + current sensor angle
-		sensor->angle_rad = sensor->full_rotation_offset + ( (float)angle_data / (float)cpr) * M_2PI;
+		sensor->angle_rad = sensor->full_rotation_offset + ((float)angle_data / (float)cpr) * M_2PI;
 		sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
 
 		// velocity calculation
-		sensor->velocity_rad = ((sensor->angle_rad - sensor->angle_prev_rad)/delta_time_us* 1000000.0f);
-		sensor->velocity_deg = ((sensor->angle_deg - sensor->angle_prev_deg)/delta_time_us* 1000000.0f);
+		float alpha_velocity_sense = (float)delta_time_us / (ALPHA_VELOCITY_TIME_CONST_US + (float)delta_time_us);
+		sensor->velocity_rad = alpha_velocity_sense * ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
+		sensor->velocity_deg = alpha_velocity_sense * ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
+		// sensor->velocity_rad = ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f);
+		// sensor->velocity_deg = ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f);
 
 		// last angle
 		sensor->angle_prev_rad = sensor->angle_rad;
@@ -189,13 +205,13 @@ void positionSensor_update(void){
 		break;
 	}
 	default:
-        break;
-    }
+		break;
+	}
 }
 
 float positionSensor_getRadians(void)
 {
-	switch(sensor->sensor_type)
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 		return sensor->angle_rad;
@@ -210,7 +226,7 @@ float positionSensor_getRadians(void)
 
 float positionSensor_getRadiansMultiturn(void)
 {
-	switch(sensor->sensor_type)
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 		return sensor->angle_rad;
@@ -223,8 +239,9 @@ float positionSensor_getRadiansMultiturn(void)
 	}
 }
 
-float positionSensor_getDegree(void){
-	switch(sensor->sensor_type)
+float positionSensor_getDegree(void)
+{
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 		return sensor->angle_deg;
@@ -237,8 +254,9 @@ float positionSensor_getDegree(void){
 	}
 }
 
-float positionSensor_getDegreeMultiturn(void){
-	switch(sensor->sensor_type)
+float positionSensor_getDegreeMultiturn(void)
+{
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 		return sensor->angle_deg;
@@ -251,8 +269,9 @@ float positionSensor_getDegreeMultiturn(void){
 	}
 }
 
-float positionSensor_getVelocityDegree(void){
-	switch(sensor->sensor_type)
+float positionSensor_getVelocityDegree(void)
+{
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 		return sensor->velocity_deg;
@@ -265,17 +284,14 @@ float positionSensor_getVelocityDegree(void){
 	}
 }
 
-
-
 e_sensor_type positionSensor_getType(void)
 {
 	return sensor->sensor_type;
 }
 
-
 uint16_t positionSensor_getDeltaTimestamp()
 {
-	switch(sensor->sensor_type)
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 		return 0;
@@ -290,7 +306,7 @@ uint16_t positionSensor_getDeltaTimestamp()
 
 int16_t positionSensor_getDeltaTimeEstimation()
 {
-	switch(sensor->sensor_type)
+	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
 		return 0;
