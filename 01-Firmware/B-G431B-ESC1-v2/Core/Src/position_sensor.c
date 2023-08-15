@@ -10,6 +10,7 @@
 #include "as5600.h"
 #include "as5048a.h"
 #include "math_tool.h"
+#include "control_table.h"
 
 #define ALPHA_VELOCITY_TIME_CONST_US 10000.0f // low pass filter for velocity measurement
 
@@ -30,6 +31,8 @@ typedef struct
 	// common sensor values
 	uint16_t lastUpdate;
 	uint16_t last_angle_data;
+	int angle;
+	int last_angle;
 	float velocity_deg;
 	float velocity_rad;
 
@@ -73,6 +76,15 @@ int positionSensor_init(e_sensor_type sensor_type)
 
 		AS5600_GetAngle(sensor->as5600Handle, &angle_data);
 		sensor->last_angle_data = angle_data;
+
+		// Lookup table angle correction
+		int off_1 = regs_lut[angle_data >> 5];
+		int off_2 = regs_lut[((angle_data >> 5) + 1) % 128];
+		int off_interp = off_1 + ((off_2 - off_1) * (angle_data - ((angle_data >> 5) << 5)) >> 5); // Interpolate between lookup table entries
+		int angle = angle_data + off_interp;
+
+		sensor->angle = angle;
+		sensor->last_angle = angle;
 
 		// velocity calculation init
 		sensor->angle_rad = 0;
@@ -120,33 +132,6 @@ float positionSensor_getRadiansEstimation(uint16_t time_us)
 	}
 }
 
-//  Shaft angle calculation
-//  angle is in radians [rad]
-void positionSensor_getAngle(void)
-{
-	// raw data from the sensor
-	uint16_t angle_data;
-
-	float cpr = pow(2, 12);
-	AS5600_GetAngle(sensor->as5600Handle, &angle_data);
-
-	// tracking the number of rotations
-	// in order to expand angle range form [0,2PI]
-	// to basically infinity
-	float d_angle = (float)(angle_data - sensor->last_angle_data);
-	// if overflow happened track it as full rotation
-	if (abs(d_angle) > (0.8 * cpr))
-		sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
-	// save the current angle value for the next steps
-	// in order to know if overflow happened
-	sensor->last_angle_data = angle_data;
-
-	// return the full angle
-	// (number of full rotations)*2PI + current sensor angle
-	sensor->angle_rad = sensor->full_rotation_offset + ((float)angle_data / (float)cpr) * M_2PI;
-	sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
-}
-
 void positionSensor_update(void)
 {
 
@@ -174,10 +159,16 @@ void positionSensor_update(void)
 		// raw data from the sensor
 		AS5600_GetAngle(sensor->as5600Handle, &angle_data);
 
+		// Lookup table angle correction
+		int off_1 = regs_lut[angle_data >> 5];
+		int off_2 = regs_lut[((angle_data >> 5) + 1) % 128];
+		int off_interp = off_1 + ((off_2 - off_1) * (angle_data - ((angle_data >> 5) << 5)) >> 5); // Interpolate between lookup table entries
+		int angle = angle_data + off_interp;
+
 		// tracking the number of rotations
 		// in order to expand angle range form [0,2PI]
 		// to basically infinity
-		d_angle = (float)(angle_data - sensor->last_angle_data);
+		d_angle = (float)(angle - sensor->last_angle);
 		// if overflow happened track it as full rotation
 		if (abs(d_angle) > (0.8 * cpr))
 			sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
@@ -187,7 +178,7 @@ void positionSensor_update(void)
 
 		// return the full angle
 		// (number of full rotations)*2PI + current sensor angle
-		sensor->angle_rad = sensor->full_rotation_offset + ((float)angle_data / (float)cpr) * M_2PI;
+		sensor->angle_rad = sensor->full_rotation_offset + ((float)angle / cpr) * M_2PI;
 		sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
 
 		// velocity calculation

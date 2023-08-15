@@ -12,8 +12,8 @@
 #include "stm32g4xx_hal.h"
 
 bool eeprom_empty();
-HAL_StatusTypeDef eeprom_restore(uint8_t *regs, uint16_t *regs_lut, uint32_t size, uint32_t size_lut);           // size must be 64 bits aligned
-HAL_StatusTypeDef eeprom_store(uint8_t const *regs, uint16_t const *regs_lut, uint32_t size, uint32_t size_lut); // size must be 64 bits aligned
+HAL_StatusTypeDef eeprom_restore(uint8_t *regs, int *regs_lut, uint32_t size, uint32_t size_lut);           // size must be 64 bits aligned
+HAL_StatusTypeDef eeprom_store(uint8_t const *regs, int const *regs_lut, uint32_t size, uint32_t size_lut); // size must be 64 bits aligned
 
 uint8_t const *eeprom_base_address();
 

@@ -29,6 +29,8 @@ float positionSensor_getVelocityDegree(void);
 e_sensor_type positionSensor_getType(void);
 uint16_t positionSensor_getDeltaTimestamp();
 int16_t positionSensor_getDeltaTimeEstimation();
+
+// MIT LUT
 int positionSensor_getAngleRaw();
 
 #endif /* INC_POSITION_SENSOR_H_ */

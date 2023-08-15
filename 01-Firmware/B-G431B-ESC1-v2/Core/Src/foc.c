@@ -238,6 +238,9 @@ void LL_FOC_Update_Voltage()
 // this function uses REG_MOTOR_POLE_PAIRS register
 int API_FOC_Calibrate()
 {
+	// clear old lookup table
+	memset(regs_lut, 0, sizeof(regs_lut));
+
 	// voltage
 #define CALIBRATION_VOLTAGE 1.5f
 	float const reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
@@ -360,13 +363,13 @@ int API_FOC_Calibrate()
 	// change mode
 	foc_state = FOC_STATE_IDLE;
 
-	// Build the lookup table
+	// Print the lookup table
 	for (int i = 0; i < REG_MAX_LUT; i++)
 	{
-		int start_angle = angle_data_raw[i];
-		int end_angle = angle_data_raw[i + 1];
-		int goal_angle = end_angle << 5 * 32;
+		HAL_Serial_Print(&serial, "%d\n", regs_lut[i]);
+		HAL_Delay(2);
 	}
+	HAL_Serial_Print(&serial, "}\n");
 
 	// store calibration into EEPROM
 	store_eeprom_regs();

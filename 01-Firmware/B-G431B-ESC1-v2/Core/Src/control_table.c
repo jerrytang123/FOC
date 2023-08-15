@@ -14,7 +14,7 @@
 #include "math_tool.h"
 
 uint8_t regs[REG_MAX];
-uint16_t regs_lut[REG_MAX_LUT];
+int regs_lut[REG_MAX_LUT];
 
 void factory_reset_eeprom_regs()
 {
@@ -103,12 +103,8 @@ void factory_reset_eeprom_regs()
 
 	regs[REG_EWMA_ENCODER] = REG_EWMA_ENCODER_VALUE;
 
-	// Restore LUT to default value of a linear array from 0 to 2*M_PI*regs[REG_MOTOR_POLE_PAIRS],
-	for (int i = 0; i < REG_MAX_LUT; i++)
-	{
-		float electrical_angle = M_2PI * regs[REG_MOTOR_POLE_PAIRS] * i / REG_MAX_LUT;
-		regs_lut[i] = (uint16_t)(electrical_angle / (M_2PI * regs[REG_MOTOR_POLE_PAIRS]) * UINT16_MAX);
-	}
+	// Restore LUT to all zero
+	memset(regs_lut, 0, sizeof(regs_lut));
 
 	eeprom_store(regs, regs_lut, REG_TORQUE_ENABLE, REG_MAX_LUT); // REG_TORQUE_ENABLE must be 64 bits aligned
 }

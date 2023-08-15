@@ -21,14 +21,14 @@ bool eeprom_empty()
 	return *(uint32_t *)(start_address) == 0xFFFFFFFF;
 }
 
-HAL_StatusTypeDef eeprom_restore(uint8_t *regs, uint16_t *regs_lut, uint32_t size, uint32_t size_lut)
+HAL_StatusTypeDef eeprom_restore(uint8_t *regs, int *regs_lut, uint32_t size, uint32_t size_lut)
 {
 	memcpy(regs, (uint8_t const *)start_address, size);
-	memcpy(regs_lut, (uint16_t const *)(start_address + size), size_lut * sizeof(uint16_t));
+	memcpy(regs_lut, (int const *)(start_address + size), size_lut * sizeof(int));
 	return HAL_OK;
 }
 
-HAL_StatusTypeDef eeprom_store(uint8_t const *regs, uint16_t const *regs_lut, uint32_t size, uint32_t size_lut)
+HAL_StatusTypeDef eeprom_store(uint8_t const *regs, int const *regs_lut, uint32_t size, uint32_t size_lut)
 {
 	HAL_FLASH_Unlock();
 	// erase the last page of bank1 (STM32G43x : 1 bank, 64 pages, 2kB per page, 64-bit data)
@@ -70,12 +70,12 @@ HAL_StatusTypeDef eeprom_store(uint8_t const *regs, uint16_t const *regs_lut, ui
 			}
 		}
 		// Write regs_lut
-		for (uint32_t index = 0; index < size_lut; index += sizeof(uint64_t) / sizeof(uint16_t)) // 64 bits
+		for (uint32_t index = 0; index < size_lut; index += sizeof(uint64_t) / sizeof(int)) // 64 bits
 		{
 			memcpy(&data, regs_lut + index, sizeof(uint64_t));
 			HAL_StatusTypeDef result = HAL_FLASH_Program(
 				FLASH_TYPEPROGRAM_DOUBLEWORD,
-				start_address + size + index * sizeof(uint16_t),
+				start_address + size + index * sizeof(int),
 				data);
 			if (result != HAL_OK)
 			{

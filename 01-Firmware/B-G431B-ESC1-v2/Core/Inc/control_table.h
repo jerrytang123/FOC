@@ -235,7 +235,7 @@ extern "C"
     void reset_ram_regs();
 
     extern uint8_t regs[REG_MAX];
-    extern uint16_t regs_lut[REG_MAX_LUT];
+    extern int regs_lut[REG_MAX_LUT];
 
 #ifdef __cplusplus
 }
