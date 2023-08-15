@@ -240,6 +240,9 @@ int API_FOC_Calibrate()
 {
 	// voltage
 #define CALIBRATION_VOLTAGE 1.5f
+	int num_pp = regs[REG_MOTOR_POLE_PAIRS];
+	int num_samples_lut = REG_MAX_LUT;
+	int num_steps_between_samples = 10; // for smoothing the calibration process
 
 	// change mode
 	foc_state = FOC_STATE_IDLE;
@@ -346,6 +349,15 @@ int API_FOC_Calibrate()
 
 	// store calibration into EEPROM
 	store_eeprom_regs();
+
+	// Print regs_lut
+	HAL_Serial_Print(&serial, "regs_lut = {");
+	for (int i = 0; i < REG_MAX_LUT; i++)
+	{
+		HAL_Serial_Print(&serial, "%d\n", regs_lut[i]);
+		HAL_Delay(2);
+	}
+	HAL_Serial_Print(&serial, "}\n");
 
 	return 0; // calibration success
 }
