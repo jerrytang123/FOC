@@ -360,17 +360,16 @@ int API_FOC_Calibrate()
 	// change mode
 	foc_state = FOC_STATE_IDLE;
 
-	// store calibration into EEPROM
-	store_eeprom_regs();
-
-	// Print angle_data_raw subtracted by the offset
-	HAL_Serial_Print(&serial, "angle_data_raw_zeroed = {");
+	// Build the lookup table
 	for (int i = 0; i < REG_MAX_LUT; i++)
 	{
-		HAL_Serial_Print(&serial, "%d\n", angle_data_raw[i] - angle_data_raw[0]);
-		HAL_Delay(2);
+		int start_angle = angle_data_raw[i];
+		int end_angle = angle_data_raw[i + 1];
+		int goal_angle = end_angle << 5 * 32;
 	}
-	HAL_Serial_Print(&serial, "}\n");
+
+	// store calibration into EEPROM
+	store_eeprom_regs();
 
 	return 0; // calibration success
 }

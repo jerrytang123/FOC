@@ -324,7 +324,7 @@ int positionSensor_getAngleRaw()
 	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
-		return sensor->last_angle_data + sensor->full_rotation_offset / M_2PI * 4096;
+		return sensor->last_angle_data;
 
 	case AS5048A_PWM:
 		return 0;
