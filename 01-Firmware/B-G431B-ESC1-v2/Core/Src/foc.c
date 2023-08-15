@@ -240,9 +240,10 @@ int API_FOC_Calibrate()
 {
 	// voltage
 #define CALIBRATION_VOLTAGE 1.5f
-	int num_pp = regs[REG_MOTOR_POLE_PAIRS];
-	int num_samples_lut = REG_MAX_LUT;
-	int num_steps_between_samples = 10; // for smoothing the calibration process
+	float const reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
+	int steps_between_samples = 10;													   // for smoothing the calibration process
+	float electrical_angle_rad_between_samples = M_2PI * reg_pole_pairs / REG_MAX_LUT; // change in angle between samples
+	int angle_data_raw[REG_MAX_LUT];												   // raw data from AS5600
 
 	// change mode
 	foc_state = FOC_STATE_IDLE;
@@ -264,15 +265,21 @@ int API_FOC_Calibrate()
 	// find natural direction
 
 	// set electrical angle
-	setpoint_electrical_angle_rad = M_3PI_2;
+	setpoint_electrical_angle_rad = 0.0f;
 	setpoint_flux_voltage_V = CALIBRATION_VOLTAGE; // hard-coded V setpoint
 	HAL_Delay(100);
 
-	// move one electrical revolution forward
-	for (int i = 0; i <= 500; ++i)
+	// move one mechanical revolution forward
+	for (int i = 0; i < REG_MAX_LUT; i++)
 	{
-		setpoint_electrical_angle_rad = M_3PI_2 + M_2PI * i / 500.0f;
-		HAL_Delay(2);
+		for (int j = 0; j < steps_between_samples; j++)
+		{
+			setpoint_electrical_angle_rad = M_2PI * i / REG_MAX_LUT * reg_pole_pairs + electrical_angle_rad_between_samples * j / steps_between_samples;
+			positionSensor_update();
+			HAL_Delay(2);
+		}
+		positionSensor_update();
+		angle_data_raw[i] = positionSensor_getAngleRaw();
 	}
 	HAL_Delay(200);
 	// take and angle in the middle
@@ -280,10 +287,17 @@ int API_FOC_Calibrate()
 	float const mid_angle = positionSensor_getRadians();
 
 	// move one electrical revolution backward
-	for (int i = 500; i >= 0; --i)
+	for (int i = REG_MAX_LUT - 1; i >= 0; i--)
 	{
-		setpoint_electrical_angle_rad = M_3PI_2 + M_2PI * i / 500.0f;
-		HAL_Delay(2);
+		for (int j = steps_between_samples - 1; j >= 0; j--)
+		{
+			setpoint_electrical_angle_rad = M_2PI * i / REG_MAX_LUT * reg_pole_pairs + electrical_angle_rad_between_samples * j / steps_between_samples;
+			positionSensor_update();
+			HAL_Delay(2);
+		}
+		positionSensor_update();
+		angle_data_raw[i] += positionSensor_getAngleRaw();
+		angle_data_raw[i] /= 2;
 	}
 	HAL_Delay(200);
 	// take and angle in the end
@@ -316,9 +330,8 @@ int API_FOC_Calibrate()
 	}
 
 	// check pole pairs
-	float const reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
-	HAL_Serial_Print(&serial, "Rotation (%d)\n", (int)(M_2PI / fabsf(delta_angle) * 1000.0f));
-	if (fabsf(fabsf(delta_angle) * reg_pole_pairs - M_2PI) > 0.5f)
+	HAL_Serial_Print(&serial, "Rotation (%d)\n", (int)(M_2PI * reg_pole_pairs / fabsf(delta_angle) * 1000.0f));
+	if (fabsf(fabsf(delta_angle) - M_2PI) > 0.5f)
 	{
 		HAL_Serial_Print(&serial, "PP error\n");
 		return 2; // failed calibration
@@ -350,11 +363,11 @@ int API_FOC_Calibrate()
 	// store calibration into EEPROM
 	store_eeprom_regs();
 
-	// Print regs_lut
-	HAL_Serial_Print(&serial, "regs_lut = {");
+	// Print angle_data_raw subtracted by the offset
+	HAL_Serial_Print(&serial, "angle_data_raw_zeroed = {");
 	for (int i = 0; i < REG_MAX_LUT; i++)
 	{
-		HAL_Serial_Print(&serial, "%d\n", regs_lut[i]);
+		HAL_Serial_Print(&serial, "%d\n", angle_data_raw[i] - angle_data_raw[0]);
 		HAL_Delay(2);
 	}
 	HAL_Serial_Print(&serial, "}\n");

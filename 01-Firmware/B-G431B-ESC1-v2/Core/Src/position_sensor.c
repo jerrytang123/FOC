@@ -158,7 +158,7 @@ void positionSensor_update(void)
 		float delta_time_us;
 		float d_angle;
 		uint16_t angle_data;
-		float cpr = pow(2, 12);
+		float cpr = 4096.0f; // AS5600 resolution is 12 bit
 
 		// calculate sample time
 		uint16_t now_us = __HAL_TIM_GET_COUNTER(&htim6);
@@ -313,6 +313,21 @@ int16_t positionSensor_getDeltaTimeEstimation()
 
 	case AS5048A_PWM:
 		return API_AS5048A_Position_Sensor_Get_DeltaTimeEstimation();
+
+	default:
+		return 0;
+	}
+}
+
+int positionSensor_getAngleRaw()
+{
+	switch (sensor->sensor_type)
+	{
+	case AS5600_I2C:
+		return sensor->last_angle_data + sensor->full_rotation_offset / M_2PI * 4096;
+
+	case AS5048A_PWM:
+		return 0;
 
 	default:
 		return 0;
