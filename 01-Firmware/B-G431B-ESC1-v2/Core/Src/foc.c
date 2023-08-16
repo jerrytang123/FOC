@@ -238,9 +238,40 @@ void LL_FOC_Update_Voltage()
 // this function uses REG_MOTOR_POLE_PAIRS register
 int API_FOC_Calibrate()
 {
-	// clear old lookup table
+	/* Rewrite for the MIT LUT logic */
+	// Clear old lookup table
 	memset(regs_lut, 0, sizeof(regs_lut));
 
+	// Init
+	// define general variables
+	float calibration_voltage = 1.5f; // Put volts on the D-Axis
+	float const npp = regs[REG_MOTOR_POLE_PAIRS];
+	// define pointers
+	float *error_f;
+	float *error_b;
+	int *lut;
+	int *raw_f;
+	int *raw_b;
+	float *error;
+	float *error_filt;
+	const int n = REG_MAX_LUT * npp;	   // number of positions to be sampled per mechanical rotation.  Multiple of NPP for filtering reasons (see later)
+	const int n2 = 40;					   // increments between saved samples (for smoothing motion)
+	float delta = 2 * PI * npp / (n * n2); // change in angle between samples
+	error_f = new float[n]();			   // error vector rotating forwards
+	error_b = new float[n]();			   // error vector rotating backwards
+	const int n_lut = REG_MAX_LUT;
+	error = new float[n]();
+	const int window = REG_MAX_LUT;
+	error_filt = new float[n]();
+	float cogging_current[window] = {0};
+	raw_f = new int[n]();
+	raw_b = new int[n]();
+	float theta_ref = 0;
+	float theta_actual = 0;
+	// Start calibration
+	printf("Starting calibration procedure\n\r");
+
+	/* Original Code Section */
 	// voltage
 #define CALIBRATION_VOLTAGE 1.5f
 	float const reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
