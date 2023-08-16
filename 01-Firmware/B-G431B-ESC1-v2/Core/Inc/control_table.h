@@ -156,7 +156,8 @@ extern "C"
 #define REG_HARDWARE_ERROR_STATUS 0xB1 // 49
 
 #define REG_MAX 0xB2
-#define REG_MAX_LUT 0x80
+#define REG_MAX_LUT_BITS 0x07
+#define REG_MAX_LUT 0x80 // must be 2^REG_MAX_LUT_BITS
 
     // REGISTER FACTORY DEFAULT VALUES ////////////////////////////////////////////
 

@@ -66,6 +66,9 @@ int positionSensor_init(e_sensor_type sensor_type)
 	{
 	case AS5600_I2C:
 	{
+		const int encoder_bits = regs[REG_ENCODER_BITS];
+		const int lut_bits = REG_MAX_LUT_BITS;
+		const int shift_bits = encoder_bits - lut_bits;
 		uint16_t angle_data;
 
 		sensor->full_rotation_offset = 0;
@@ -78,9 +81,9 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->last_angle_data = angle_data;
 
 		// Lookup table angle correction
-		int off_1 = regs_lut[angle_data >> 5];
-		int off_2 = regs_lut[((angle_data >> 5) + 1) % 128];
-		int off_interp = off_1 + ((off_2 - off_1) * (angle_data - ((angle_data >> 5) << 5)) >> 5); // Interpolate between lookup table entries
+		int off_1 = regs_lut[angle_data >> shift_bits];
+		int off_2 = regs_lut[((angle_data >> shift_bits) + 1) % 128];
+		int off_interp = off_1 + ((off_2 - off_1) * (angle_data - ((angle_data >> shift_bits) << shift_bits)) >> shift_bits); // Interpolate between lookup table entries
 		int angle = angle_data + off_interp;
 
 		sensor->angle = angle;
@@ -140,10 +143,11 @@ void positionSensor_update(void)
 	// get new data from as5600 sensor
 	case AS5600_I2C:
 	{
+		const int encoder_bits = regs[REG_ENCODER_BITS];
+		const float cpr = pow(2, encoder_bits);
 		float delta_time_us;
 		float d_angle;
 		uint16_t angle_data;
-		float cpr = 4096.0f; // AS5600 resolution is 12 bit
 
 		// calculate sample time
 		uint16_t now_us = __HAL_TIM_GET_COUNTER(&htim6);

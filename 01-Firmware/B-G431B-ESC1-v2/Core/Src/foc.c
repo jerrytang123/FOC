@@ -78,7 +78,7 @@ float absolute_position_rad = 0.0f; // public // DEBUG
 // FOC current sense
 static float motor_current_mA[3] = {0.0f, 0.0f, 0.0f};
 static float motor_current_input_adc_offset[3] = {2464.0f, 2482.0f, 2485.0f};
-static float const motor_current_input_adc_KmA = -29.41f; // V/mA // note : the (-) sign here
+static const float motor_current_input_adc_KmA = -29.41f; // V/mA // note : the (-) sign here
 // process phase current
 // Note : when current flows inward phase, shunt voltage is negative
 // Note : when current flows outward phase, shunt voltage is positive
@@ -168,18 +168,18 @@ void LL_FOC_Update_Temperature() __attribute__((section(".ccmram")));
 void LL_FOC_Update_Temperature()
 {
 	// convert ADC sample into temperature (STM32G431-ESC1 specific)
-	static float const R60 = 4700.0f;											// ohm
-	static float const eps = 0.1f;												// epsilon (avoid divide by zero)
-	float const R_NTC = R60 * (4096.0f / (temperature_input_adc + eps) - 1.0f); // 10kohm NTC at 25°C
-	static float const Beta = 3455.0f;											// for a 10k NTC
-	static float const Kelvin = 273.15f;										// °C
-	static float const T0 = 273.15f + 25.0f;
-	static float const R0 = 10000.0f; // 10kohm at 25° for 10k NTC
-	float const present_temperature_K = Beta * T0 / (Beta - T0 * logf(R0 / R_NTC));
+	static const float R60 = 4700.0f;											// ohm
+	static const float eps = 0.1f;												// epsilon (avoid divide by zero)
+	const float R_NTC = R60 * (4096.0f / (temperature_input_adc + eps) - 1.0f); // 10kohm NTC at 25°C
+	static const float Beta = 3455.0f;											// for a 10k NTC
+	static const float Kelvin = 273.15f;										// °C
+	static const float T0 = 273.15f + 25.0f;
+	static const float R0 = 10000.0f; // 10kohm at 25° for 10k NTC
+	const float present_temperature_K = Beta * T0 / (Beta - T0 * logf(R0 / R_NTC));
 	present_temperature_C = present_temperature_K - Kelvin;
 
 	// apply thermal protection and update hardware error register
-	float const max_temperature_C = regs[REG_TEMPERATURE_LIMIT];
+	const float max_temperature_C = regs[REG_TEMPERATURE_LIMIT];
 	if (present_temperature_C > max_temperature_C)
 	{
 		// set overheating error
@@ -211,15 +211,15 @@ void LL_FOC_Update_Voltage()
 {
 	// process input voltage (STM32G431-ESC1 specific)
 	{
-		static float const R68 = 169.0f; // kohm
-		static float const R76 = 18.0f;	 // kohm
-		static float const alpha_voltage = 0.05f;
+		static const float R68 = 169.0f; // kohm
+		static const float R76 = 18.0f;	 // kohm
+		static const float alpha_voltage = 0.05f;
 		present_voltage_V = (vbus_input_adc / 4096.0f * 3.3f * (R68 + R76) / R76) * alpha_voltage + (1.0f - alpha_voltage) * present_voltage_V;
 	}
 
 	// apply voltage protection and update
-	float const min_voltage_V = regs[REG_LOW_VOLTAGE_LIMIT];
-	float const max_voltage_V = regs[REG_HIGH_VOLTAGE_LIMIT];
+	const float min_voltage_V = regs[REG_LOW_VOLTAGE_LIMIT];
+	const float max_voltage_V = regs[REG_HIGH_VOLTAGE_LIMIT];
 	if ((present_voltage_V > max_voltage_V) || (present_voltage_V < min_voltage_V))
 	{
 		// set voltage error
@@ -244,167 +244,147 @@ int API_FOC_Calibrate()
 
 	// Init
 	// define general variables
-	float calibration_voltage = 1.5f; // Put volts on the D-Axis
-	float const npp = regs[REG_MOTOR_POLE_PAIRS];
-	// define pointers
-	float *error_f;
-	float *error_b;
-	int *lut;
-	int *raw_f;
-	int *raw_b;
-	float *error;
-	float *error_filt;
-	const int n = REG_MAX_LUT * npp;	   // number of positions to be sampled per mechanical rotation.  Multiple of NPP for filtering reasons (see later)
-	const int n2 = 40;					   // increments between saved samples (for smoothing motion)
-	float delta = 2 * PI * npp / (n * n2); // change in angle between samples
-	error_f = new float[n]();			   // error vector rotating forwards
-	error_b = new float[n]();			   // error vector rotating backwards
+	const int encoder_bits = regs[REG_ENCODER_BITS];
+	const int lut_bits = REG_MAX_LUT_BITS;
+	const int shift_bits = encoder_bits - lut_bits;
+	const int npp = regs[REG_MOTOR_POLE_PAIRS];
+	const int n = REG_MAX_LUT * npp; // number of positions to be sampled per mechanical rotation.  Multiple of NPP for filtering reasons (see later)
+	const int n2 = 10;				 // increments between saved samples (for smoothing motion)
 	const int n_lut = REG_MAX_LUT;
-	error = new float[n]();
-	const int window = REG_MAX_LUT;
-	error_filt = new float[n]();
-	float cogging_current[window] = {0};
-	raw_f = new int[n]();
-	raw_b = new int[n]();
+	const float cpr = pow(2, encoder_bits);
+	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
+	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
+	// define arrays
+	float error_f[n];
+	float error_b[n];
+	int lut[n_lut];
+	int raw_f[n];
+	int raw_b[n];
+	float error[n];
+	float error_filt[n];
 	float theta_ref = 0;
 	float theta_actual = 0;
+
 	// Start calibration
-	printf("Starting calibration procedure\n\r");
+	HAL_Serial_Print(&serial, "Starting calibration procedure\n\r");
 
-	/* Original Code Section */
-	// voltage
-#define CALIBRATION_VOLTAGE 1.5f
-	float const reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
-	int steps_between_samples = 10;													   // for smoothing the calibration process
-	float electrical_angle_rad_between_samples = M_2PI * reg_pole_pairs / REG_MAX_LUT; // change in angle between samples
-	int angle_data_raw[REG_MAX_LUT];												   // raw data from AS5600
-
-	// change mode
-	foc_state = FOC_STATE_IDLE;
-	HAL_Delay(200);
-
-	// reset setpoints
+	// Reset controller output
 	setpoint_electrical_angle_rad = 0.0f;
 	setpoint_flux_voltage_V = 0.0f;
-
+	foc_state = FOC_STATE_IDLE;
+	HAL_Delay(200);
 	// reset settings
 	regs[REG_INV_PHASE_MOTOR] = 0;
 	regs[REG_MOTOR_SYNCHRO_L] = 0;
 	regs[REG_MOTOR_SYNCHRO_H] = 0;
 	regs[REG_MOTOR_SYNCHRO_H] = 0;
 
-	// change mode
-	foc_state = FOC_STATE_FLUX_CONTROL;
-
-	// find natural direction
-
-	// set electrical angle
+	// Apply voltage with voltage angle set to zero, wait for rotor position to settle
 	setpoint_electrical_angle_rad = 0.0f;
-	setpoint_flux_voltage_V = CALIBRATION_VOLTAGE; // hard-coded V setpoint
-	HAL_Delay(100);
+	setpoint_flux_voltage_V = calibration_voltage; // hard-coded V setpoint
+	foc_state = FOC_STATE_FLUX_CONTROL;
+	HAL_Delay(200);
 
-	// move one mechanical revolution forward
-	for (int i = 0; i < REG_MAX_LUT; i++)
+	// Rotate forward
+	for (int i = 0; i < n; i++)
 	{
-		for (int j = 0; j < steps_between_samples; j++)
+		for (int j = 0; j < n2; j++)
 		{
-			setpoint_electrical_angle_rad = M_2PI * i / REG_MAX_LUT * reg_pole_pairs + electrical_angle_rad_between_samples * j / steps_between_samples;
+			theta_ref += delta;
+			setpoint_electrical_angle_rad = theta_ref;
 			positionSensor_update();
-			HAL_Delay(2);
+			HAL_Delay(1);
 		}
 		positionSensor_update();
-		angle_data_raw[i] = positionSensor_getAngleRaw();
+		theta_actual = positionSensor_getRadians();
+		error_f[i] = theta_ref / npp - theta_actual;
+		raw_f[i] = positionSensor_getAngleRaw();
 	}
-	HAL_Delay(200);
-	// take and angle in the middle
-	positionSensor_update();
-	float const mid_angle = positionSensor_getRadians();
 
-	// move one electrical revolution backward
-	for (int i = REG_MAX_LUT - 1; i >= 0; i--)
+	// Rotate backwards
+	for (int i = 0; i < n; i++)
 	{
-		for (int j = steps_between_samples - 1; j >= 0; j--)
+		for (int j = 0; j < n2; j++)
 		{
-			setpoint_electrical_angle_rad = M_2PI * i / REG_MAX_LUT * reg_pole_pairs + electrical_angle_rad_between_samples * j / steps_between_samples;
+			theta_ref -= delta;
+			setpoint_electrical_angle_rad = theta_ref;
 			positionSensor_update();
-			HAL_Delay(2);
+			HAL_Delay(1);
 		}
 		positionSensor_update();
-		angle_data_raw[i] += positionSensor_getAngleRaw();
-		angle_data_raw[i] /= 2;
+		theta_actual = positionSensor_getRadians();
+		error_b[i] = theta_ref / npp - theta_actual;
+		raw_b[i] = positionSensor_getAngleRaw();
 	}
-	HAL_Delay(200);
-	// take and angle in the end
-	positionSensor_update();
-	float const end_angle = positionSensor_getRadians();
 
-	// release motor
+	// Release motor
 	setpoint_electrical_angle_rad = 0.0f;
 	setpoint_flux_voltage_V = 0.0f;
-
-	// change mode
 	foc_state = FOC_STATE_IDLE;
 
-	// determine the direction the sensor moved
-	float const delta_angle = mid_angle - end_angle;
-	if (fabsf(delta_angle) < 0.1f) // arbitrary delta angle
+	// Compute direction and electrical offset
+	const float delta_angle = raw_b[n] - raw_b[0];
+	regs[REG_INV_PHASE_MOTOR] = delta_angle > 0.0f ? 0 : 1;
+	float offset = 0;
+	for (int i = 0; i < n; i++)
 	{
-		HAL_Serial_Print(&serial, "Calibration failed (motor did not turn)\n", 0);
-		return 1; // failed calibration
+		offset += (error_f[i] + error_b[n - 1 - i]) / (2.0f * n); // calclate average position sensor offset
 	}
-	if (delta_angle > 0.0f)
-	{
-		regs[REG_INV_PHASE_MOTOR] = 0;
-		HAL_Serial_Print(&serial, "Normal (%d)\n", 0); // CCW
-	}
-	else
-	{
-		regs[REG_INV_PHASE_MOTOR] = 1;
-		HAL_Serial_Print(&serial, "Reverse (%d)\n", 1); // CW
-	}
-
-	// check pole pairs
-	HAL_Serial_Print(&serial, "Rotation (%d)\n", (int)(M_2PI * reg_pole_pairs / fabsf(delta_angle) * 1000.0f));
-	if (fabsf(fabsf(delta_angle) - M_2PI) > 0.5f)
-	{
-		HAL_Serial_Print(&serial, "PP error\n");
-		return 2; // failed calibration
-	}
-
-	// set electrical angle
-	setpoint_electrical_angle_rad = 0.0f;
-	setpoint_flux_voltage_V = CALIBRATION_VOLTAGE; // hard-coded V setpoint
-
-	// change mode
-	foc_state = FOC_STATE_FLUX_CONTROL;
-
-	// wait
-	HAL_Delay(1000);
-	positionSensor_update();
-	float const reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
-	float const phase_synchro_offset_rad = normalize_angle(-positionSensor_getRadians() * reg_pole_pairs * reverse);
-	HAL_Serial_Print(&serial, "Synchro (%d)\n", (int)(RADIANS_TO_DEGREES(phase_synchro_offset_rad)));
+	const float reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
+	const float phase_synchro_offset_rad = normalize_angle(-offset * npp * reverse);
 	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
 	regs[REG_MOTOR_SYNCHRO_H] = HIGH_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
 
-	// release motor
-	setpoint_electrical_angle_rad = 0.0f;
-	setpoint_flux_voltage_V = 0.0f;
-
-	// change mode
-	foc_state = FOC_STATE_IDLE;
-
-	// Print the lookup table
-	for (int i = 0; i < REG_MAX_LUT; i++)
-	{
-		HAL_Serial_Print(&serial, "%d\n", regs_lut[i]);
-		HAL_Delay(2);
+	// Perform filtering to linearize position sensor eccentricity
+	float mean = 0;
+	for (int i = 0; i < n; i++)
+	{ // Average the forward and back directions
+		error[i] = 0.5f * (error_f[i] + error_b[n - i - 1]);
 	}
-	HAL_Serial_Print(&serial, "}\n");
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < n_lut; j++)
+		{
+			int ind = -n_lut / 2 + j + i; // indexes from -n_lut/2 to + n_lut/2
+			if (ind < 0)
+			{
+				ind += n;
+			}
+			else if (ind > n - 1) // moving average wraps around
+			{
+				ind -= n;
+			}
+			error_filt[i] += error[ind] / (float)n_lut;
+		}
+		mean += error_filt[i] / n;
+	}
+	int raw_offset = (raw_f[0] + raw_b[n - 1]) / 2; // Insensitive to errors in this direction, so 2 points is plenty
 
-	// store calibration into EEPROM
+	// Build lookup table
+	for (int i = 0; i < n_lut; i++)
+	{
+		int ind = (raw_offset >> shift_bits) + i;
+		if (ind > (n_lut - 1))
+		{
+			ind -= n_lut;
+		}
+		lut[ind] = (int)((error_filt[i * npp] - mean) * cpr / M_2PI);
+	}
+
+	// Copy lut to regs_lut with memcpy
+	memcpy(regs_lut, lut, sizeof(lut));
+
+	// Print calibration information
+	HAL_Serial_Print(&serial, "Direction: %d\n", (int)(reverse));
+	HAL_Serial_Print(&serial, "Synchro: %d\n", (int)(RADIANS_TO_DEGREES(phase_synchro_offset_rad)));
+	HAL_Serial_Print(&serial, "Lookup Table:\n");
+	for (int i = 0; i < n_lut; i++)
+	{
+		HAL_Serial_Print(&serial, "%d. %d\n", i, regs_lut[i]);
+	}
+
+	// Store calibration into EEPROM
 	store_eeprom_regs();
-
 	return 0; // calibration success
 }
 
@@ -432,14 +412,14 @@ void API_FOC_Torque_Update()
 	float sine_theta = 1.0f;
 
 	// synch with registers
-	float const phase_offset_rad = DEGREES_TO_RADIANS((int16_t)(MAKE_SHORT(regs[REG_MOTOR_SYNCHRO_L], regs[REG_MOTOR_SYNCHRO_H])));
-	float const phase_synchro_offset_rad = DEGREES_TO_RADIANS((float)(MAKE_SHORT(regs[REG_GOAL_SYNCHRO_OFFSET_L], regs[REG_GOAL_SYNCHRO_OFFSET_H]))); // manual synchro triming
-	float const reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
-	float const reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
-	float const flux_Kp = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_FLUX_CURRENT_KP_L], regs[REG_PID_FLUX_CURRENT_KP_H]))) / 100000.0f;
-	float const flux_Ki = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_FLUX_CURRENT_KI_L], regs[REG_PID_FLUX_CURRENT_KI_H]))) / 100000000.0f;
-	float const torque_Kp = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_TORQUE_CURRENT_KP_L], regs[REG_PID_TORQUE_CURRENT_KP_H]))) / 100000.0f;
-	float const torque_Ki = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_TORQUE_CURRENT_KI_L], regs[REG_PID_TORQUE_CURRENT_KI_H]))) / 100000000.0f;
+	const float phase_offset_rad = DEGREES_TO_RADIANS((int16_t)(MAKE_SHORT(regs[REG_MOTOR_SYNCHRO_L], regs[REG_MOTOR_SYNCHRO_H])));
+	const float phase_synchro_offset_rad = DEGREES_TO_RADIANS((float)(MAKE_SHORT(regs[REG_GOAL_SYNCHRO_OFFSET_L], regs[REG_GOAL_SYNCHRO_OFFSET_H]))); // manual synchro triming
+	const float reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
+	const float reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
+	const float flux_Kp = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_FLUX_CURRENT_KP_L], regs[REG_PID_FLUX_CURRENT_KP_H]))) / 100000.0f;
+	const float flux_Ki = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_FLUX_CURRENT_KI_L], regs[REG_PID_FLUX_CURRENT_KI_H]))) / 100000000.0f;
+	const float torque_Kp = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_TORQUE_CURRENT_KP_L], regs[REG_PID_TORQUE_CURRENT_KP_H]))) / 100000.0f;
+	const float torque_Ki = (float)((int16_t)(MAKE_SHORT(regs[REG_PID_TORQUE_CURRENT_KI_L], regs[REG_PID_TORQUE_CURRENT_KI_H]))) / 100000000.0f;
 
 	// check control mode
 	switch (foc_state)
@@ -453,8 +433,8 @@ void API_FOC_Torque_Update()
 		API_CORDIC_Processor_Update(theta_rad, &cosine_theta, &sine_theta);
 
 		// [Clarke Transformation]
-		float const present_Ialpha = (2.0f * motor_current_mA[0] - motor_current_mA[1] - motor_current_mA[2]) / 3.0f;
-		float const present_Ibeta = INV_SQRT3 * (motor_current_mA[1] - motor_current_mA[2]);
+		const float present_Ialpha = (2.0f * motor_current_mA[0] - motor_current_mA[1] - motor_current_mA[2]) / 3.0f;
+		const float present_Ibeta = INV_SQRT3 * (motor_current_mA[1] - motor_current_mA[2]);
 
 		// [Park Transformation]
 		present_Ids_mA = present_Ialpha * cosine_theta + present_Ibeta * sine_theta;
@@ -476,8 +456,8 @@ void API_FOC_Torque_Update()
 		API_CORDIC_Processor_Update(theta_rad, &cosine_theta, &sine_theta);
 
 		// [Clarke Transformation]
-		float const present_Ialpha = (2.0f * motor_current_mA[0] - motor_current_mA[1] - motor_current_mA[2]) / 3.0f;
-		float const present_Ibeta = INV_SQRT3 * (motor_current_mA[1] - motor_current_mA[2]);
+		const float present_Ialpha = (2.0f * motor_current_mA[0] - motor_current_mA[1] - motor_current_mA[2]) / 3.0f;
+		const float present_Ibeta = INV_SQRT3 * (motor_current_mA[1] - motor_current_mA[2]);
 
 		// [Park Transformation]
 		present_Ids_mA = (present_Ialpha * cosine_theta + present_Ibeta * sine_theta);
@@ -500,11 +480,11 @@ void API_FOC_Torque_Update()
 		);
 
 		// voltage norm saturation Umax = Udc/sqrt(3)
-		float const Vmax = present_voltage_V * INV_SQRT3;
-		float const Vnorm = sqrtf(Vds * Vds + Vqs * Vqs);
+		const float Vmax = present_voltage_V * INV_SQRT3;
+		const float Vnorm = sqrtf(Vds * Vds + Vqs * Vqs);
 		if (Vnorm > Vmax)
 		{
-			float const k = fabsf(Vmax / Vnorm);
+			const float k = fabsf(Vmax / Vnorm);
 			Vqs *= k;
 			Vds *= k;
 		}
@@ -520,7 +500,7 @@ void API_FOC_Torque_Update()
 		present_Iqs_mA = 0.0f;
 
 		// compute theta
-		float const theta_rad = normalize_angle(setpoint_electrical_angle_rad);
+		const float theta_rad = normalize_angle(setpoint_electrical_angle_rad);
 
 		// compute cosine and sine
 		API_CORDIC_Processor_Update(theta_rad, &cosine_theta, &sine_theta);
