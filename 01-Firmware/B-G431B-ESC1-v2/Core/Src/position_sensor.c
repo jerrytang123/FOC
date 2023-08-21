@@ -144,6 +144,8 @@ void positionSensor_update(void)
 	case AS5600_I2C:
 	{
 		const int encoder_bits = regs[REG_ENCODER_BITS];
+		const int lut_bits = REG_MAX_LUT_BITS;
+		const int shift_bits = encoder_bits - lut_bits;
 		const float cpr = pow(2, encoder_bits);
 		float delta_time_us;
 		float d_angle;
@@ -164,9 +166,9 @@ void positionSensor_update(void)
 		AS5600_GetAngle(sensor->as5600Handle, &angle_data);
 
 		// Lookup table angle correction
-		int off_1 = regs_lut[angle_data >> 5];
-		int off_2 = regs_lut[((angle_data >> 5) + 1) % 128];
-		int off_interp = off_1 + ((off_2 - off_1) * (angle_data - ((angle_data >> 5) << 5)) >> 5); // Interpolate between lookup table entries
+		int off_1 = regs_lut[angle_data >> shift_bits];
+		int off_2 = regs_lut[((angle_data >> shift_bits) + 1) % 128];
+		int off_interp = off_1 + ((off_2 - off_1) * (angle_data - ((angle_data >> shift_bits) << shift_bits)) >> shift_bits); // Interpolate between lookup table entries
 		int angle = angle_data + off_interp;
 
 		// tracking the number of rotations
@@ -178,6 +180,7 @@ void positionSensor_update(void)
 			sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
 		// save the current angle value for the next steps
 		// in order to know if overflow happened
+		sensor->last_angle = angle;
 		sensor->last_angle_data = angle_data;
 
 		// return the full angle

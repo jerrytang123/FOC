@@ -286,6 +286,7 @@ int API_FOC_Calibrate()
 	HAL_Delay(200);
 
 	// Rotate forward
+	HAL_Serial_Print(&serial, "Rotating forward\n\r");
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n2; j++)
@@ -302,6 +303,7 @@ int API_FOC_Calibrate()
 	}
 
 	// Rotate backwards
+	HAL_Serial_Print(&serial, "Rotating backward\n\r");
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n2; j++)
