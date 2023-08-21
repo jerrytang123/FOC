@@ -256,7 +256,7 @@ int API_FOC_Calibrate()
 	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
-	int lut[n_lut];
+	int *lut[n_lut] = (int *)malloc(n_lut * sizeof(int));
 	float *error = (float *)malloc(n * sizeof(float));
 	float *error_filt = (float *)malloc(n * sizeof(float));
 	float theta_ref = 0;
@@ -297,43 +297,43 @@ int API_FOC_Calibrate()
 	// Find the direction of the encoder
 	positionSensor_update();
 	theta_start = positionSensor_getRadians();
-	for (int i = 0; i < 200; i++)
+	int n_dir = 200;
+	for (int i = 0; i < n_dir; i++)
 	{
-		setpoint_electrical_angle_rad = M_2PI * i / 200;
+		setpoint_electrical_angle_rad = M_2PI * i / n_dir;
 		positionSensor_update();
 		HAL_Delay(1);
 	}
 	HAL_Delay(200);
 	positionSensor_update();
 	theta_end = positionSensor_getRadians();
-	for (int i = 0; i < 200; i++)
+	for (int i = n_dir; i > 0; i--)
 	{
-		setpoint_electrical_angle_rad = M_2PI * (200 - 1 - i) / 200;
+		setpoint_electrical_angle_rad = M_2PI * i / n_dir;
 		positionSensor_update();
 		HAL_Delay(1);
 	}
 	const float delta_angle = theta_end - theta_start;
 	regs[REG_INV_PHASE_MOTOR] = delta_angle > 0.0f ? 0 : 1;
 	const float reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
+	HAL_Delay(200);
+	positionSensor_update();
 
 	// Rotate forward
 	HAL_Serial_Print(&serial, "Rotating forward\n\r");
+	raw_f_0 = positionSensor_getAngleRaw();
 	for (int i = 0; i < n; i++)
 	{
+		positionSensor_update();
+		theta_actual = positionSensor_getRadians();
+		float error_f = theta_ref / npp - theta_actual;
+		error[i] += 0.5f * error_f;
 		for (int j = 0; j < n2; j++)
 		{
 			theta_ref += delta;
 			setpoint_electrical_angle_rad = theta_ref;
 			positionSensor_update();
 			HAL_Delay(1);
-		}
-		positionSensor_update();
-		theta_actual = positionSensor_getRadians();
-		float error_f = theta_ref / npp - theta_actual;
-		error[i] += 0.5f * error_f;
-		if (i == 0)
-		{
-			raw_f_0 = positionSensor_getAngleRaw();
 		}
 	}
 
@@ -352,11 +352,8 @@ int API_FOC_Calibrate()
 		theta_actual = positionSensor_getRadians();
 		float error_b = theta_ref / npp - theta_actual;
 		error[n - i - 1] += 0.5f * error_b;
-		if (i == n - 1)
-		{
-			raw_b_n1 = positionSensor_getAngleRaw();
-		}
 	}
+	raw_b_n1 = positionSensor_getAngleRaw();
 
 	// Release motor
 	setpoint_electrical_angle_rad = 0.0f;
@@ -369,7 +366,7 @@ int API_FOC_Calibrate()
 	{
 		offset += error[i] / n; // calclate average position sensor offset
 	}
-	const float phase_synchro_offset_rad = normalize_angle(-offset * npp * reverse);
+	const float phase_synchro_offset_rad = normalize_angle(offset * npp * reverse);
 	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
 	regs[REG_MOTOR_SYNCHRO_H] = HIGH_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
 
@@ -420,7 +417,11 @@ int API_FOC_Calibrate()
 
 	// Store calibration into EEPROM
 	store_eeprom_regs();
-	HAL_Serial_Print(&serial, "Calibration Success!\n");
+
+	// Free memory
+	free(lut);
+	free(error);
+	free(error_filt);
 	return 0; // calibration success
 }
 
