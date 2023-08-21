@@ -20,6 +20,7 @@
 
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 
 // hard-coded settings
 #define ALPHA_CURRENT_SENSE_OFFSET 0.001f // low pass filter for calibrating the phase current ADC offset (automatically)
@@ -249,21 +250,29 @@ int API_FOC_Calibrate()
 	const int shift_bits = encoder_bits - lut_bits;
 	const int npp = regs[REG_MOTOR_POLE_PAIRS];
 	const int n = REG_MAX_LUT * npp; // number of positions to be sampled per mechanical rotation.  Multiple of NPP for filtering reasons (see later)
-	const int n2 = 10;				 // increments between saved samples (for smoothing motion)
+	const int n2 = 5;				 // increments between saved samples (for smoothing motion)
 	const int n_lut = REG_MAX_LUT;
 	const float cpr = pow(2, encoder_bits);
 	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
-	float error_f[n];
-	float error_b[n];
 	int lut[n_lut];
-	int raw_f[n];
-	int raw_b[n];
-	float error[n];
-	float error_filt[n];
+	float *error = (float *)malloc(n * sizeof(float));
+	float *error_filt = (float *)malloc(n * sizeof(float));
 	float theta_ref = 0;
 	float theta_actual = 0;
+	// save memory
+	int raw_f_0 = 0;
+	int raw_b_n1 = 0;
+	float theta_start = 0;
+	float theta_end = 0;
+
+	// Init variables
+	for (int i = 0; i < n; i++)
+	{
+		error[i] = 0;
+		error_filt[i] = 0;
+	}
 
 	// Start calibration
 	HAL_Serial_Print(&serial, "Starting calibration procedure\n\r");
@@ -285,6 +294,28 @@ int API_FOC_Calibrate()
 	foc_state = FOC_STATE_FLUX_CONTROL;
 	HAL_Delay(200);
 
+	// Find the direction of the encoder
+	positionSensor_update();
+	theta_start = positionSensor_getRadians();
+	for (int i = 0; i < 200; i++)
+	{
+		setpoint_electrical_angle_rad = M_2PI * i / 200;
+		positionSensor_update();
+		HAL_Delay(1);
+	}
+	HAL_Delay(200);
+	positionSensor_update();
+	theta_end = positionSensor_getRadians();
+	for (int i = 0; i < 200; i++)
+	{
+		setpoint_electrical_angle_rad = M_2PI * (200 - 1 - i) / 200;
+		positionSensor_update();
+		HAL_Delay(1);
+	}
+	const float delta_angle = theta_end - theta_start;
+	regs[REG_INV_PHASE_MOTOR] = delta_angle > 0.0f ? 0 : 1;
+	const float reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
+
 	// Rotate forward
 	HAL_Serial_Print(&serial, "Rotating forward\n\r");
 	for (int i = 0; i < n; i++)
@@ -298,8 +329,12 @@ int API_FOC_Calibrate()
 		}
 		positionSensor_update();
 		theta_actual = positionSensor_getRadians();
-		error_f[i] = theta_ref / npp - theta_actual;
-		raw_f[i] = positionSensor_getAngleRaw();
+		float error_f = theta_ref / npp - theta_actual;
+		error[i] += 0.5f * error_f;
+		if (i == 0)
+		{
+			raw_f_0 = positionSensor_getAngleRaw();
+		}
 	}
 
 	// Rotate backwards
@@ -315,8 +350,12 @@ int API_FOC_Calibrate()
 		}
 		positionSensor_update();
 		theta_actual = positionSensor_getRadians();
-		error_b[i] = theta_ref / npp - theta_actual;
-		raw_b[i] = positionSensor_getAngleRaw();
+		float error_b = theta_ref / npp - theta_actual;
+		error[n - i - 1] += 0.5f * error_b;
+		if (i == n - 1)
+		{
+			raw_b_n1 = positionSensor_getAngleRaw();
+		}
 	}
 
 	// Release motor
@@ -325,24 +364,17 @@ int API_FOC_Calibrate()
 	foc_state = FOC_STATE_IDLE;
 
 	// Compute direction and electrical offset
-	const float delta_angle = raw_b[n] - raw_b[0];
-	regs[REG_INV_PHASE_MOTOR] = delta_angle > 0.0f ? 0 : 1;
 	float offset = 0;
 	for (int i = 0; i < n; i++)
 	{
-		offset += (error_f[i] + error_b[n - 1 - i]) / (2.0f * n); // calclate average position sensor offset
+		offset += error[i] / n; // calclate average position sensor offset
 	}
-	const float reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
 	const float phase_synchro_offset_rad = normalize_angle(-offset * npp * reverse);
 	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
 	regs[REG_MOTOR_SYNCHRO_H] = HIGH_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
 
 	// Perform filtering to linearize position sensor eccentricity
 	float mean = 0;
-	for (int i = 0; i < n; i++)
-	{ // Average the forward and back directions
-		error[i] = 0.5f * (error_f[i] + error_b[n - i - 1]);
-	}
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n_lut; j++)
@@ -360,7 +392,7 @@ int API_FOC_Calibrate()
 		}
 		mean += error_filt[i] / n;
 	}
-	int raw_offset = (raw_f[0] + raw_b[n - 1]) / 2; // Insensitive to errors in this direction, so 2 points is plenty
+	int raw_offset = (raw_f_0 + raw_b_n1) / 2;
 
 	// Build lookup table
 	for (int i = 0; i < n_lut; i++)
@@ -383,10 +415,12 @@ int API_FOC_Calibrate()
 	for (int i = 0; i < n_lut; i++)
 	{
 		HAL_Serial_Print(&serial, "%d. %d\n", i, regs_lut[i]);
+		HAL_Delay(10);
 	}
 
 	// Store calibration into EEPROM
 	store_eeprom_regs();
+	HAL_Serial_Print(&serial, "Calibration Success!\n");
 	return 0; // calibration success
 }
 
@@ -502,7 +536,7 @@ void API_FOC_Torque_Update()
 		present_Iqs_mA = 0.0f;
 
 		// compute theta
-		const float theta_rad = normalize_angle(setpoint_electrical_angle_rad);
+		const float theta_rad = normalize_angle(setpoint_electrical_angle_rad * reverse);
 
 		// compute cosine and sine
 		API_CORDIC_Processor_Update(theta_rad, &cosine_theta, &sine_theta);

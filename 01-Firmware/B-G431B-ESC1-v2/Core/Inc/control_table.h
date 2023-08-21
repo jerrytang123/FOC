@@ -167,8 +167,8 @@ extern "C"
 #define REG_BAUD_RATE_VALUE 3     // 1: 1Mbps
 #define REG_RETURN_DELAY_VALUE 0  // 0: zero delay
 
-#define REG_MIN_POSITION_DEG_VALUE -8000  // deg
-#define REG_MAX_POSITION_DEG_VALUE 8000   // deg
+#define REG_MIN_POSITION_DEG_VALUE -800   // deg
+#define REG_MAX_POSITION_DEG_VALUE 800    // deg
 #define REG_MAX_VELOCITY_DPS_VALUE 16000  // dps
 #define REG_MAX_ACCELERATION_DPSS_VALUE 0 // dpss
 #define REG_MAX_CURRENT_MA_VALUE 26000    // mA

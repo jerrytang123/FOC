@@ -189,11 +189,11 @@ void positionSensor_update(void)
 		sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
 
 		// velocity calculation
-		float alpha_velocity_sense = (float)delta_time_us / (ALPHA_VELOCITY_TIME_CONST_US + (float)delta_time_us);
-		sensor->velocity_rad = alpha_velocity_sense * ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
-		sensor->velocity_deg = alpha_velocity_sense * ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
-		// sensor->velocity_rad = ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f);
-		// sensor->velocity_deg = ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f);
+		// float alpha_velocity_sense = (float)delta_time_us / (ALPHA_VELOCITY_TIME_CONST_US + (float)delta_time_us);
+		// sensor->velocity_rad = alpha_velocity_sense * ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
+		// sensor->velocity_deg = alpha_velocity_sense * ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
+		sensor->velocity_rad = ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f);
+		sensor->velocity_deg = ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f);
 
 		// last angle
 		sensor->angle_prev_rad = sensor->angle_rad;
