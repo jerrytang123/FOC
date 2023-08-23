@@ -256,7 +256,7 @@ int API_FOC_Calibrate()
 	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
-	int *lut[n_lut] = (int *)malloc(n_lut * sizeof(int));
+	int lut[n_lut];
 	float *error = (float *)malloc(n * sizeof(float));
 	float *error_filt = (float *)malloc(n * sizeof(float));
 	float theta_ref = 0;
@@ -297,7 +297,7 @@ int API_FOC_Calibrate()
 	// Find the direction of the encoder
 	positionSensor_update();
 	theta_start = positionSensor_getRadians();
-	int n_dir = 200;
+	int n_dir = 500;
 	for (int i = 0; i < n_dir; i++)
 	{
 		setpoint_electrical_angle_rad = M_2PI * i / n_dir;
@@ -324,10 +324,6 @@ int API_FOC_Calibrate()
 	raw_f_0 = positionSensor_getAngleRaw();
 	for (int i = 0; i < n; i++)
 	{
-		positionSensor_update();
-		theta_actual = positionSensor_getRadians();
-		float error_f = theta_ref / npp - theta_actual;
-		error[i] += 0.5f * error_f;
 		for (int j = 0; j < n2; j++)
 		{
 			theta_ref += delta;
@@ -335,6 +331,10 @@ int API_FOC_Calibrate()
 			positionSensor_update();
 			HAL_Delay(1);
 		}
+		positionSensor_update();
+		theta_actual = positionSensor_getRadians();
+		float error_f = theta_ref / npp - theta_actual;
+		error[i] += 0.5f * error_f;
 	}
 
 	// Rotate backwards
@@ -419,7 +419,6 @@ int API_FOC_Calibrate()
 	store_eeprom_regs();
 
 	// Free memory
-	free(lut);
 	free(error);
 	free(error_filt);
 	return 0; // calibration success
