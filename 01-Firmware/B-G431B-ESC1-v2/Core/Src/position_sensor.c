@@ -77,11 +77,7 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->as5600Handle->i2cHandle = &hi2c1;
 		AS5600_Init(sensor->as5600Handle);
 
-		HAL_StatusTypeDef status = AS5600_GetAngle(sensor->as5600Handle, &angle_data);
-		if (status != HAL_OK)
-		{
-			angle_data = sensor->last_angle_data;
-		}
+		AS5600_GetAngle(sensor->as5600Handle, &angle_data);
 		sensor->last_angle_data = angle_data;
 
 		// Lookup table angle correction
@@ -167,7 +163,18 @@ void positionSensor_update(void)
 		}
 
 		// raw data from the sensor
-		AS5600_GetAngle(sensor->as5600Handle, &angle_data);
+		HAL_StatusTypeDef status = AS5600_GetAngle(sensor->as5600Handle, &angle_data);
+		if (status != HAL_OK)
+		{
+			angle_data = sensor->last_angle_data;
+			// set encoder error
+			regs[REG_HARDWARE_ERROR_STATUS] |= 1UL << HW_ERROR_BIT_POSITION_SENSOR_STATUS_ERROR;
+		}
+		else
+		{
+			// clear encoder error
+			regs[REG_HARDWARE_ERROR_STATUS] &= ~(1UL << HW_ERROR_BIT_POSITION_SENSOR_STATUS_ERROR);
+		}
 
 		// Lookup table angle correction
 		int off_1 = regs_lut[angle_data >> shift_bits];
