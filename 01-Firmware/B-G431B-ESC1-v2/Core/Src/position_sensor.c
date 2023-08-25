@@ -77,7 +77,11 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->as5600Handle->i2cHandle = &hi2c1;
 		AS5600_Init(sensor->as5600Handle);
 
-		AS5600_GetAngle(sensor->as5600Handle, &angle_data);
+		HAL_StatusTypeDef status = AS5600_GetAngle(sensor->as5600Handle, &angle_data);
+		if (status != HAL_OK)
+		{
+			angle_data = sensor->last_angle_data;
+		}
 		sensor->last_angle_data = angle_data;
 
 		// Lookup table angle correction

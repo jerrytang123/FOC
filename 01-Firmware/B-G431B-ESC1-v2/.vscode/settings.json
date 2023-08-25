@@ -3,6 +3,7 @@
         "*.ino": "cpp",
         "math_tool.h": "c",
         "stm32g4xx_hal.h": "c",
-        "cmath": "c"
+        "cmath": "c",
+        "as5600.h": "c"
     }
 }
