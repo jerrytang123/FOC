@@ -11,8 +11,10 @@
 
 #include "stm32g4xx_hal.h"
 #include <string.h>
+#include "math_tool.h"
 
 uint8_t regs[REG_MAX];
+int regs_lut[REG_MAX_LUT];
 
 void factory_reset_eeprom_regs()
 {
@@ -48,7 +50,6 @@ void factory_reset_eeprom_regs()
 	regs[REG_MOTOR_SYNCHRO_H] = HIGH_BYTE(REG_MOTOR_SYNCHRO_VALUE);
 	regs[REG_INV_PHASE_MOTOR] = REG_INV_PHASE_VALUE;
 	regs[REG_FIELD_WEAKENING_K] = REG_FIELD_WEAKENING_K_VALUE;
-
 
 	regs[REG_PID_POSITION_KP_L] = LOW_BYTE(REG_PID_POSITION_KP_VALUE);
 	regs[REG_PID_POSITION_KP_H] = HIGH_BYTE(REG_PID_POSITION_KP_VALUE);
@@ -102,22 +103,23 @@ void factory_reset_eeprom_regs()
 
 	regs[REG_EWMA_ENCODER] = REG_EWMA_ENCODER_VALUE;
 
-	eeprom_store(regs, REG_TORQUE_ENABLE); // REG_TORQUE_ENABLE must be 64 bits aligned
-}
+	// Restore LUT to all zero
+	memset(regs_lut, 0, sizeof(regs_lut));
 
+	eeprom_store(regs, regs_lut, REG_TORQUE_ENABLE, REG_MAX_LUT); // REG_TORQUE_ENABLE must be 64 bits aligned
+}
 
 void load_eeprom_regs()
 {
-	eeprom_restore(regs, REG_TORQUE_ENABLE); // REG_TORQUE_ENABLE must be 64 bits aligned
+	eeprom_restore(regs, regs_lut, REG_TORQUE_ENABLE, REG_MAX_LUT); // REG_TORQUE_ENABLE must be 64 bits aligned
 }
 
 void store_eeprom_regs()
 {
-	eeprom_store(regs, REG_TORQUE_ENABLE); // REG_TORQUE_ENABLE must be 64 bits aligned
+	eeprom_store(regs, regs_lut, REG_TORQUE_ENABLE, REG_MAX_LUT); // REG_TORQUE_ENABLE must be 64 bits aligned
 }
 
 void reset_ram_regs()
 {
-	memset(&regs[REG_TORQUE_ENABLE],0,REG_MAX-REG_TORQUE_ENABLE);
+	memset(&regs[REG_TORQUE_ENABLE], 0, REG_MAX - REG_TORQUE_ENABLE);
 }
-

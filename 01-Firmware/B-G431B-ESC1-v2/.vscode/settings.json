@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.ino": "cpp",
+        "math_tool.h": "c",
+        "stm32g4xx_hal.h": "c",
+        "cmath": "c",
+        "as5600.h": "c",
+        "control_table.h": "c"
+    }
+}

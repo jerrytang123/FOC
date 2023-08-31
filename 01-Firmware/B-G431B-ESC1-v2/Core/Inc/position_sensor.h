@@ -18,7 +18,8 @@ typedef enum
 } e_sensor_type;
 
 int positionSensor_init(e_sensor_type sensor_type);
-float positionSensor_getRadiansEstimation(uint16_t time_us) __attribute__((section (".ccmram")));;
+float positionSensor_getRadiansEstimation(uint16_t time_us) __attribute__((section(".ccmram")));
+;
 void positionSensor_update(void);
 float positionSensor_getRadians(void);
 float positionSensor_getRadiansMultiturn(void);
@@ -28,5 +29,8 @@ float positionSensor_getVelocityDegree(void);
 e_sensor_type positionSensor_getType(void);
 uint16_t positionSensor_getDeltaTimestamp();
 int16_t positionSensor_getDeltaTimeEstimation();
+
+// MIT LUT
+int positionSensor_getAngleRaw();
 
 #endif /* INC_POSITION_SENSOR_H_ */
