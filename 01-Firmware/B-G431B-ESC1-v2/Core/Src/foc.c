@@ -250,10 +250,10 @@ int API_FOC_Calibrate()
 	const int shift_bits = encoder_bits - lut_bits;
 	const int npp = regs[REG_MOTOR_POLE_PAIRS];
 	const int n = REG_MAX_LUT * npp; // number of positions to be sampled per mechanical rotation.  Multiple of NPP for filtering reasons (see later)
-	const int n2 = 2;				 // increments between saved samples (for smoothing motion)
+	const int n2 = 50 / npp;		 // increments between saved samples (for smoothing motion)
 	const int n_lut = REG_MAX_LUT;
 	const float cpr = pow(2, encoder_bits);
-	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
+	const float calibration_voltage = 1.0f; // Put volts on the D-Axis
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
 	int lut[n_lut];
