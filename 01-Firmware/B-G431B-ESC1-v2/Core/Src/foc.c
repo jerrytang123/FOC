@@ -250,15 +250,15 @@ int API_FOC_Calibrate()
 	const int shift_bits = encoder_bits - lut_bits;
 	const int npp = regs[REG_MOTOR_POLE_PAIRS];
 	const int n = REG_MAX_LUT * npp; // number of positions to be sampled per mechanical rotation.  Multiple of NPP for filtering reasons (see later)
-	const int n2 = 50 / npp;		 // increments between saved samples (for smoothing motion)
+	const int n2 = 5;				 // increments between saved samples (for smoothing motion)
 	const int n_lut = REG_MAX_LUT;
 	const float cpr = pow(2, encoder_bits);
-	const float calibration_voltage = 1.0f; // Put volts on the D-Axis
+	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
 	int lut[n_lut];
-	float *error = (float *)malloc(n * sizeof(float));
-	float *error_filt = (float *)malloc(n * sizeof(float));
+	int8_t *error = (int8_t *)malloc(n * sizeof(int8_t));
+	int8_t *error_filt = (int8_t *)malloc(n * sizeof(int8_t));
 	float theta_ref = 0;
 	float theta_actual = 0;
 	// save memory
@@ -266,13 +266,6 @@ int API_FOC_Calibrate()
 	int raw_b_n1 = 0;
 	float theta_start = 0;
 	float theta_end = 0;
-
-	// Init variables
-	for (int i = 0; i < n; i++)
-	{
-		error[i] = 0;
-		error_filt[i] = 0;
-	}
 
 	// Start calibration
 	HAL_Serial_Print(&serial, "Starting calibration procedure\n\r");
@@ -333,8 +326,8 @@ int API_FOC_Calibrate()
 		}
 		positionSensor_update();
 		theta_actual = positionSensor_getRadians();
-		float error_f = theta_ref / npp - theta_actual;
-		error[i] += 0.5f * error_f;
+		float error_f = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
+		error[i] = (int8_t)round(error_f);
 	}
 
 	// Rotate backwards
@@ -350,8 +343,8 @@ int API_FOC_Calibrate()
 		}
 		positionSensor_update();
 		theta_actual = positionSensor_getRadians();
-		float error_b = theta_ref / npp - theta_actual;
-		error[n - i - 1] += 0.5f * error_b;
+		float error_b = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
+		error[n - i - 1] = (int8_t)round(0.5f * (error_b + error[n - i - 1]));
 	}
 	raw_b_n1 = positionSensor_getAngleRaw();
 
@@ -364,7 +357,7 @@ int API_FOC_Calibrate()
 	float offset = 0;
 	for (int i = 0; i < n; i++)
 	{
-		offset += error[i] / n; // calclate average position sensor offset
+		offset += DEGREES_TO_RADIANS(error[i]) / n; // calclate average position sensor offset
 	}
 	const float phase_synchro_offset_rad = normalize_angle(offset * npp * reverse);
 	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
@@ -374,6 +367,7 @@ int API_FOC_Calibrate()
 	float mean = 0;
 	for (int i = 0; i < n; i++)
 	{
+		float error_filt_i = 0;
 		for (int j = 0; j < n_lut; j++)
 		{
 			int ind = -n_lut / 2 + j + i; // indexes from -n_lut/2 to + n_lut/2
@@ -385,9 +379,10 @@ int API_FOC_Calibrate()
 			{
 				ind -= n;
 			}
-			error_filt[i] += error[ind] / (float)n_lut;
+			error_filt_i += error[ind] / (float)n_lut;
 		}
-		mean += error_filt[i] / n;
+		error_filt[i] = (int8_t)round(error_filt_i);
+		mean += DEGREES_TO_RADIANS(error_filt[i]) / n;
 	}
 	int raw_offset = (raw_f_0 + raw_b_n1) / 2;
 
@@ -399,7 +394,7 @@ int API_FOC_Calibrate()
 		{
 			ind -= n_lut;
 		}
-		lut[ind] = (int)((error_filt[i * npp] - mean) * cpr / M_2PI);
+		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp]) - mean) * cpr / M_2PI);
 	}
 
 	// Copy lut to regs_lut with memcpy
