@@ -344,7 +344,7 @@ int API_FOC_Calibrate()
 		positionSensor_update();
 		theta_actual = positionSensor_getRadians();
 		float error_b = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
-		error[n - i - 1] = (int8_t)round(0.5f * (error_b + error[n - i - 1]));
+		error[n - i - 1] = (int8_t)round(error_b + error[n - i - 1]);
 	}
 	raw_b_n1 = positionSensor_getAngleRaw();
 
@@ -394,7 +394,7 @@ int API_FOC_Calibrate()
 		{
 			ind -= n_lut;
 		}
-		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp]) - mean) * cpr / M_2PI);
+		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp]) / 2 - mean) * cpr / M_2PI);
 	}
 
 	// Copy lut to regs_lut with memcpy
