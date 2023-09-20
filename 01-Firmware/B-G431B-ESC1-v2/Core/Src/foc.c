@@ -266,6 +266,7 @@ int API_FOC_Calibrate()
 	int raw_b_n1 = 0;
 	float theta_start = 0;
 	float theta_end = 0;
+	float precison_multiplier = 10;
 
 	// Start calibration
 	HAL_Serial_Print(&serial, "Starting calibration procedure\n\r");
@@ -328,7 +329,7 @@ int API_FOC_Calibrate()
 		positionSensor_update();
 		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_f = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
-		error[i] = (int8_t)round(error_f);
+		error[i] = (int8_t)round(error_f * precison_multiplier);
 	}
 
 	// Rotate backwards
@@ -345,7 +346,7 @@ int API_FOC_Calibrate()
 		positionSensor_update();
 		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_b = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
-		error[n - i - 1] = (int8_t)round(error_b) + error[n - i - 1];
+		error[n - i - 1] = (int8_t)round((error_b * precison_multiplier + error[n - i - 1]) / 2);
 	}
 	raw_b_n1 = positionSensor_getAngleRaw();
 
@@ -358,7 +359,7 @@ int API_FOC_Calibrate()
 	float offset = 0;
 	for (int i = 0; i < n; i++)
 	{
-		offset += DEGREES_TO_RADIANS(error[i] / 2 - theta_start) / n; // calclate average position sensor offset
+		offset += DEGREES_TO_RADIANS(error[i] / precison_multiplier - theta_start) / n; // calclate average position sensor offset
 	}
 	const float phase_synchro_offset_rad = normalize_angle(offset * npp * reverse);
 	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
@@ -383,7 +384,7 @@ int API_FOC_Calibrate()
 			error_filt_i += error[ind] / (float)n_lut;
 		}
 		error_filt[i] = (int8_t)round(error_filt_i);
-		mean += DEGREES_TO_RADIANS(error_filt[i]) / n;
+		mean += DEGREES_TO_RADIANS(error_filt[i] / precison_multiplier) / n;
 	}
 	int raw_offset = (raw_f_0 + raw_b_n1) / 2;
 
@@ -395,7 +396,7 @@ int API_FOC_Calibrate()
 		{
 			ind -= n_lut;
 		}
-		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp] / 2) - mean) * cpr / M_2PI);
+		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp] / precison_multiplier) - mean) * cpr / M_2PI);
 	}
 
 	// Copy lut to regs_lut with memcpy
