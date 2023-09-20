@@ -289,9 +289,9 @@ int API_FOC_Calibrate()
 
 	// Find the direction of the encoder
 	positionSensor_update();
-	theta_start = positionSensor_getRadians();
+	theta_start = positionSensor_getRadiansMultiturn();
 	int n_dir = 500;
-	for (int i = 0; i < n_dir; i++)
+	for (int i = 0; i <= n_dir; i++)
 	{
 		setpoint_electrical_angle_rad = M_2PI * i / n_dir;
 		positionSensor_update();
@@ -299,8 +299,8 @@ int API_FOC_Calibrate()
 	}
 	HAL_Delay(200);
 	positionSensor_update();
-	theta_end = positionSensor_getRadians();
-	for (int i = n_dir; i > 0; i--)
+	theta_end = positionSensor_getRadiansMultiturn();
+	for (int i = n_dir; i >= 0; i--)
 	{
 		setpoint_electrical_angle_rad = M_2PI * i / n_dir;
 		positionSensor_update();
@@ -315,7 +315,7 @@ int API_FOC_Calibrate()
 	// Rotate forward
 	HAL_Serial_Print(&serial, "Rotating forward\n\r");
 	raw_f_0 = positionSensor_getAngleRaw();
-	theta_start = positionSensor_getRadians();
+	theta_start = positionSensor_getRadiansMultiturn();
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n2; j++)
@@ -326,7 +326,7 @@ int API_FOC_Calibrate()
 			HAL_Delay(1);
 		}
 		positionSensor_update();
-		theta_actual = positionSensor_getRadians() - theta_start;
+		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_f = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
 		error[i] = (int8_t)round(error_f);
 	}
@@ -343,9 +343,9 @@ int API_FOC_Calibrate()
 			HAL_Delay(1);
 		}
 		positionSensor_update();
-		theta_actual = positionSensor_getRadians() - theta_start;
+		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_b = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
-		error[n - i - 1] = (int8_t)round(error_b + error[n - i - 1]);
+		error[n - i - 1] = (int8_t)round(error_b) + error[n - i - 1];
 	}
 	raw_b_n1 = positionSensor_getAngleRaw();
 
@@ -395,7 +395,7 @@ int API_FOC_Calibrate()
 		{
 			ind -= n_lut;
 		}
-		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp] / 2 - theta_start) - mean) * cpr / M_2PI);
+		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp] / 2) - mean) * cpr / M_2PI);
 	}
 
 	// Copy lut to regs_lut with memcpy
