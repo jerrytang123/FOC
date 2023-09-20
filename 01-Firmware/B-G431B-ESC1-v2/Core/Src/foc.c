@@ -257,8 +257,8 @@ int API_FOC_Calibrate()
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
 	int lut[n_lut];
-	int8_t *error = (int8_t *)malloc(n * sizeof(int8_t));
-	int8_t *error_filt = (int8_t *)malloc(n * sizeof(int8_t));
+	int16_t *error = (int16_t *)malloc(n * sizeof(int16_t));
+	int16_t *error_filt = (int16_t *)malloc(n * sizeof(int16_t));
 	float theta_ref = 0;
 	float theta_actual = 0;
 	// save memory
@@ -266,7 +266,7 @@ int API_FOC_Calibrate()
 	int raw_b_n1 = 0;
 	float theta_start = 0;
 	float theta_end = 0;
-	float precison_multiplier = 10;
+	float precison_multiplier = 1000; // max encoder deviation without messing up the LUT is "data type for error max value" / precison_multiplier
 
 	// Start calibration
 	HAL_Serial_Print(&serial, "Starting calibration procedure\n\r");
@@ -329,7 +329,7 @@ int API_FOC_Calibrate()
 		positionSensor_update();
 		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_f = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
-		error[i] = (int8_t)round(error_f * precison_multiplier);
+		error[i] = (int16_t)round(error_f * precison_multiplier);
 	}
 
 	// Rotate backwards
@@ -346,7 +346,7 @@ int API_FOC_Calibrate()
 		positionSensor_update();
 		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_b = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
-		error[n - i - 1] = (int8_t)round((error_b * precison_multiplier + error[n - i - 1]) / 2);
+		error[n - i - 1] = (int16_t)round((error_b * precison_multiplier + error[n - i - 1]) / 2);
 	}
 	raw_b_n1 = positionSensor_getAngleRaw();
 
@@ -383,7 +383,7 @@ int API_FOC_Calibrate()
 			}
 			error_filt_i += error[ind] / (float)n_lut;
 		}
-		error_filt[i] = (int8_t)round(error_filt_i);
+		error_filt[i] = (int16_t)round(error_filt_i);
 		mean += DEGREES_TO_RADIANS(error_filt[i] / precison_multiplier) / n;
 	}
 	int raw_offset = (raw_f_0 + raw_b_n1) / 2;
