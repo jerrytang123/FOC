@@ -315,6 +315,7 @@ int API_FOC_Calibrate()
 	// Rotate forward
 	HAL_Serial_Print(&serial, "Rotating forward\n\r");
 	raw_f_0 = positionSensor_getAngleRaw();
+	theta_start = positionSensor_getRadians();
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n2; j++)
@@ -325,7 +326,7 @@ int API_FOC_Calibrate()
 			HAL_Delay(1);
 		}
 		positionSensor_update();
-		theta_actual = positionSensor_getRadians();
+		theta_actual = positionSensor_getRadians() - theta_start;
 		float error_f = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
 		error[i] = (int8_t)round(error_f);
 	}
@@ -342,7 +343,7 @@ int API_FOC_Calibrate()
 			HAL_Delay(1);
 		}
 		positionSensor_update();
-		theta_actual = positionSensor_getRadians();
+		theta_actual = positionSensor_getRadians() - theta_start;
 		float error_b = RADIANS_TO_DEGREES(theta_ref / npp - theta_actual);
 		error[n - i - 1] = (int8_t)round(error_b + error[n - i - 1]);
 	}
@@ -357,7 +358,7 @@ int API_FOC_Calibrate()
 	float offset = 0;
 	for (int i = 0; i < n; i++)
 	{
-		offset += DEGREES_TO_RADIANS(error[i]) / n; // calclate average position sensor offset
+		offset += DEGREES_TO_RADIANS(error[i] / 2 - theta_start) / n; // calclate average position sensor offset
 	}
 	const float phase_synchro_offset_rad = normalize_angle(offset * npp * reverse);
 	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
@@ -394,7 +395,7 @@ int API_FOC_Calibrate()
 		{
 			ind -= n_lut;
 		}
-		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp]) / 2 - mean) * cpr / M_2PI);
+		lut[ind] = (int)((DEGREES_TO_RADIANS(error_filt[i * npp] / 2 - theta_start) - mean) * cpr / M_2PI);
 	}
 
 	// Copy lut to regs_lut with memcpy
