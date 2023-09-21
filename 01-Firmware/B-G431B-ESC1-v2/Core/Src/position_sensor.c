@@ -126,7 +126,7 @@ float positionSensor_getRadiansEstimation(uint16_t time_us)
 			delta_t_us = (time_us - sensor->lastUpdate);
 		}
 		// return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us) / 1000000.0f;
-		return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us + 200) / 1000000.0f; // Slow filter latency is 0.2ms
+		return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us + 800) / 1000000.0f; // Slow filter latency is 0.2ms
 	}
 	case AS5048A_PWM:
 		return API_AS5048A_Position_Sensor_Get_Radians_Estimation(time_us);
