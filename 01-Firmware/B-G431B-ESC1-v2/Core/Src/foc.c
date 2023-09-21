@@ -73,9 +73,8 @@ static float present_Ids_mA = 0.0;
 static float present_Iqs_mA = 0.0f;
 static pid_context_t flux_pi;
 static pid_context_t torque_pi;
-float theta_rad = 0.0f;				  // public // DEBUG
-float absolute_position_rad = 0.0f;	  // public // DEBUG
-float precison_multiplier = 10000.0f; // max encoder deviation without messing up the LUT is "data type for error max value" / precison_multiplier rad
+float theta_rad = 0.0f;				// public // DEBUG
+float absolute_position_rad = 0.0f; // public // DEBUG
 
 // FOC current sense
 static float motor_current_mA[3] = {0.0f, 0.0f, 0.0f};
@@ -266,6 +265,7 @@ int API_FOC_Calibrate()
 	int raw_b_n1 = 0;
 	float theta_start = 0;
 	float theta_end = 0;
+	float precison_multiplier = 10000; // max encoder deviation without messing up the LUT is "data type for error max value" / precison_multiplier rad
 
 	// Start calibration
 	HAL_Serial_Print(&serial, "Starting calibration procedure\n\r");
@@ -361,8 +361,8 @@ int API_FOC_Calibrate()
 		offset += (error[i] / precison_multiplier - theta_start) / n; // calclate average position sensor offset
 	}
 	const float phase_synchro_offset_rad = normalize_angle(offset * npp * reverse);
-	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)(phase_synchro_offset_rad * precison_multiplier));
-	regs[REG_MOTOR_SYNCHRO_H] = HIGH_BYTE((int)(phase_synchro_offset_rad * precison_multiplier));
+	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
+	regs[REG_MOTOR_SYNCHRO_H] = HIGH_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
 
 	// Perform filtering to linearize position sensor eccentricity
 	float mean = 0;
@@ -444,7 +444,7 @@ void API_FOC_Torque_Update()
 	float sine_theta = 1.0f;
 
 	// synch with registers
-	const float phase_offset_rad = (float)((int16_t)(MAKE_SHORT(regs[REG_MOTOR_SYNCHRO_L], regs[REG_MOTOR_SYNCHRO_H]))) / precison_multiplier;
+	const float phase_offset_rad = DEGREES_TO_RADIANS((int16_t)(MAKE_SHORT(regs[REG_MOTOR_SYNCHRO_L], regs[REG_MOTOR_SYNCHRO_H])));
 	const float phase_synchro_offset_rad = DEGREES_TO_RADIANS((float)(MAKE_SHORT(regs[REG_GOAL_SYNCHRO_OFFSET_L], regs[REG_GOAL_SYNCHRO_OFFSET_H]))); // manual synchro triming
 	const float reg_pole_pairs = regs[REG_MOTOR_POLE_PAIRS];
 	const float reverse = regs[REG_INV_PHASE_MOTOR] == 0 ? 1.0f : -1.0f;
