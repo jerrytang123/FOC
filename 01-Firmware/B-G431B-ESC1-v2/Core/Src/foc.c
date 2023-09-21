@@ -279,7 +279,6 @@ int API_FOC_Calibrate()
 	regs[REG_INV_PHASE_MOTOR] = 0;
 	regs[REG_MOTOR_SYNCHRO_L] = 0;
 	regs[REG_MOTOR_SYNCHRO_H] = 0;
-	regs[REG_MOTOR_SYNCHRO_H] = 0;
 
 	// Apply voltage with voltage angle set to zero, wait for rotor position to settle
 	setpoint_electrical_angle_rad = 0.0f;
