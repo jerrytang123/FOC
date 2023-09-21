@@ -257,9 +257,8 @@ int API_FOC_Calibrate()
 	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
-	int lut[n_lut];
 	int16_t *error = (int16_t *)malloc(n * sizeof(int16_t));
-	int16_t *error_filt = (int16_t *)malloc(n * sizeof(int16_t));
+	int16_t *error_filt = (int16_t *)malloc(n_lut * sizeof(int16_t));
 	float theta_ref = 0;
 	float theta_actual = 0;
 	// save memory
@@ -383,8 +382,11 @@ int API_FOC_Calibrate()
 			}
 			error_filt_i += error[ind] / (float)n_lut;
 		}
-		error_filt[i] = (int16_t)round(error_filt_i);
-		mean += error_filt[i] / precison_multiplier / n;
+		mean += error_filt_i / precison_multiplier / n;
+		if (i % npp == 0)
+		{
+			error_filt[i / npp] = (int16_t)round(error_filt_i);
+		}
 	}
 	int raw_offset = (raw_f_0 + raw_b_n1) / 2;
 
@@ -396,11 +398,8 @@ int API_FOC_Calibrate()
 		{
 			ind -= n_lut;
 		}
-		lut[ind] = (int)((error_filt[i * npp] / precison_multiplier - mean) * cpr / M_2PI);
+		regs_lut[ind] = (int)((error_filt[i] / precison_multiplier - mean) * cpr / M_2PI);
 	}
-
-	// Copy lut to regs_lut with memcpy
-	memcpy(regs_lut, lut, sizeof(lut));
 
 	// Print calibration information
 	HAL_Serial_Print(&serial, "Direction: %d\n", (int)(reverse));
