@@ -43,7 +43,7 @@ typedef struct
 	float angle_prev_deg;
 
 	int natural_direction;
-	float full_rotation_offset;
+	int full_rotation_offset;
 
 } positionSensor_t;
 
@@ -126,7 +126,7 @@ float positionSensor_getRadiansEstimation(uint16_t time_us)
 			delta_t_us = (time_us - sensor->lastUpdate);
 		}
 		// return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us) / 1000000.0f;
-		return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us + 200) / 1000000.0f; // Slow filter latency is 0.2ms
+		return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us + 800) / 1000000.0f; // Slow filter latency is 0.2ms
 	}
 	case AS5048A_PWM:
 		return API_AS5048A_Position_Sensor_Get_Radians_Estimation(time_us);
@@ -187,8 +187,12 @@ void positionSensor_update(void)
 		// to basically infinity
 		d_angle = (float)(angle - sensor->last_angle);
 		// if overflow happened track it as full rotation
+		int full_rotation = 0;
 		if (abs(d_angle) > (0.8 * cpr))
-			sensor->full_rotation_offset += d_angle > 0 ? -M_2PI : M_2PI;
+		{
+			full_rotation = d_angle > 0 ? -1 : 1;
+		}
+		sensor->full_rotation_offset += full_rotation;
 		// save the current angle value for the next steps
 		// in order to know if overflow happened
 		sensor->last_angle = angle;
@@ -196,13 +200,13 @@ void positionSensor_update(void)
 
 		// return the full angle
 		// (number of full rotations)*2PI + current sensor angle
-		sensor->angle_rad = sensor->full_rotation_offset + ((float)angle / cpr) * M_2PI;
+		sensor->angle_rad = ((float)angle / cpr) * M_2PI;
 		sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
 
 		// velocity calculation
 		float alpha_velocity_sense = (float)delta_time_us / (ALPHA_VELOCITY_TIME_CONST_US + (float)delta_time_us);
-		sensor->velocity_rad = alpha_velocity_sense * ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
-		sensor->velocity_deg = alpha_velocity_sense * ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
+		sensor->velocity_rad = alpha_velocity_sense * ((sensor->angle_rad + full_rotation * M_2PI - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
+		sensor->velocity_deg = alpha_velocity_sense * ((sensor->angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
 		// sensor->velocity_rad = ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f);
 		// sensor->velocity_deg = ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f);
 
@@ -238,7 +242,7 @@ float positionSensor_getRadiansMultiturn(void)
 	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
-		return sensor->angle_rad;
+		return sensor->angle_rad + sensor->full_rotation_offset * M_2PI;
 
 	case AS5048A_PWM:
 		return API_AS5048A_Position_Sensor_Get_Multiturn_Radians();
@@ -268,7 +272,7 @@ float positionSensor_getDegreeMultiturn(void)
 	switch (sensor->sensor_type)
 	{
 	case AS5600_I2C:
-		return sensor->angle_deg;
+		return sensor->angle_deg + sensor->full_rotation_offset * 360.0f;
 
 	case AS5048A_PWM:
 		return RADIANS_TO_DEGREES(API_AS5048A_Position_Sensor_Get_Multiturn_Radians());

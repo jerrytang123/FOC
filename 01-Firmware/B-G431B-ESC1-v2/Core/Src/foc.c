@@ -256,9 +256,8 @@ int API_FOC_Calibrate()
 	const float calibration_voltage = 1.5f; // Put volts on the D-Axis
 	float delta = M_2PI * npp / (n * n2);	// change in angle between samples
 	// define arrays
-	int lut[n_lut];
-	float *error = (float *)malloc(n * sizeof(float));
-	float *error_filt = (float *)malloc(n * sizeof(float));
+	int16_t *error = (int16_t *)malloc(n * sizeof(int16_t));
+	int16_t *error_filt = (int16_t *)malloc(n_lut * sizeof(int16_t));
 	float theta_ref = 0;
 	float theta_actual = 0;
 	// save memory
@@ -266,13 +265,7 @@ int API_FOC_Calibrate()
 	int raw_b_n1 = 0;
 	float theta_start = 0;
 	float theta_end = 0;
-
-	// Init variables
-	for (int i = 0; i < n; i++)
-	{
-		error[i] = 0;
-		error_filt[i] = 0;
-	}
+	float precison_multiplier = 10000; // max encoder deviation without messing up the LUT is "data type for error max value" / precison_multiplier rad
 
 	// Start calibration
 	HAL_Serial_Print(&serial, "Starting calibration procedure\n\r");
@@ -286,7 +279,6 @@ int API_FOC_Calibrate()
 	regs[REG_INV_PHASE_MOTOR] = 0;
 	regs[REG_MOTOR_SYNCHRO_L] = 0;
 	regs[REG_MOTOR_SYNCHRO_H] = 0;
-	regs[REG_MOTOR_SYNCHRO_H] = 0;
 
 	// Apply voltage with voltage angle set to zero, wait for rotor position to settle
 	setpoint_electrical_angle_rad = 0.0f;
@@ -296,9 +288,9 @@ int API_FOC_Calibrate()
 
 	// Find the direction of the encoder
 	positionSensor_update();
-	theta_start = positionSensor_getRadians();
+	theta_start = positionSensor_getRadiansMultiturn();
 	int n_dir = 500;
-	for (int i = 0; i < n_dir; i++)
+	for (int i = 0; i <= n_dir; i++)
 	{
 		setpoint_electrical_angle_rad = M_2PI * i / n_dir;
 		positionSensor_update();
@@ -306,8 +298,8 @@ int API_FOC_Calibrate()
 	}
 	HAL_Delay(200);
 	positionSensor_update();
-	theta_end = positionSensor_getRadians();
-	for (int i = n_dir; i > 0; i--)
+	theta_end = positionSensor_getRadiansMultiturn();
+	for (int i = n_dir; i >= 0; i--)
 	{
 		setpoint_electrical_angle_rad = M_2PI * i / n_dir;
 		positionSensor_update();
@@ -322,6 +314,7 @@ int API_FOC_Calibrate()
 	// Rotate forward
 	HAL_Serial_Print(&serial, "Rotating forward\n\r");
 	raw_f_0 = positionSensor_getAngleRaw();
+	theta_start = positionSensor_getRadiansMultiturn();
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n2; j++)
@@ -332,9 +325,9 @@ int API_FOC_Calibrate()
 			HAL_Delay(1);
 		}
 		positionSensor_update();
-		theta_actual = positionSensor_getRadians();
+		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_f = theta_ref / npp - theta_actual;
-		error[i] += 0.5f * error_f;
+		error[i] = (int16_t)round(error_f * precison_multiplier);
 	}
 
 	// Rotate backwards
@@ -349,9 +342,9 @@ int API_FOC_Calibrate()
 			HAL_Delay(1);
 		}
 		positionSensor_update();
-		theta_actual = positionSensor_getRadians();
+		theta_actual = positionSensor_getRadiansMultiturn() - theta_start;
 		float error_b = theta_ref / npp - theta_actual;
-		error[n - i - 1] += 0.5f * error_b;
+		error[n - i - 1] = (int16_t)round((error_b * precison_multiplier + error[n - i - 1]) / 2);
 	}
 	raw_b_n1 = positionSensor_getAngleRaw();
 
@@ -364,7 +357,7 @@ int API_FOC_Calibrate()
 	float offset = 0;
 	for (int i = 0; i < n; i++)
 	{
-		offset += error[i] / n; // calclate average position sensor offset
+		offset += (error[i] / precison_multiplier - theta_start) / n; // calclate average position sensor offset
 	}
 	const float phase_synchro_offset_rad = normalize_angle(offset * npp * reverse);
 	regs[REG_MOTOR_SYNCHRO_L] = LOW_BYTE((int)RADIANS_TO_DEGREES(phase_synchro_offset_rad));
@@ -374,6 +367,7 @@ int API_FOC_Calibrate()
 	float mean = 0;
 	for (int i = 0; i < n; i++)
 	{
+		float error_filt_i = 0;
 		for (int j = 0; j < n_lut; j++)
 		{
 			int ind = -n_lut / 2 + j + i; // indexes from -n_lut/2 to + n_lut/2
@@ -385,9 +379,13 @@ int API_FOC_Calibrate()
 			{
 				ind -= n;
 			}
-			error_filt[i] += error[ind] / (float)n_lut;
+			error_filt_i += error[ind] / (float)n_lut;
 		}
-		mean += error_filt[i] / n;
+		mean += error_filt_i / precison_multiplier / n;
+		if (i % npp == 0)
+		{
+			error_filt[i / npp] = (int16_t)round(error_filt_i);
+		}
 	}
 	int raw_offset = (raw_f_0 + raw_b_n1) / 2;
 
@@ -399,11 +397,8 @@ int API_FOC_Calibrate()
 		{
 			ind -= n_lut;
 		}
-		lut[ind] = (int)((error_filt[i * npp] - mean) * cpr / M_2PI);
+		regs_lut[ind] = (int)((error_filt[i] / precison_multiplier - mean) * cpr / M_2PI);
 	}
-
-	// Copy lut to regs_lut with memcpy
-	memcpy(regs_lut, lut, sizeof(lut));
 
 	// Print calibration information
 	HAL_Serial_Print(&serial, "Direction: %d\n", (int)(reverse));
