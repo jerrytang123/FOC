@@ -183,7 +183,7 @@ extern "C"
 #define REG_ALARM_SHUTDOWN_VALUE 0       // TODO : fill comment
 
 #define REG_ENCODER_BITS_VALUE 12       //
-#define REG_MOTOR_POLE_PAIRS_VALUE 24   //
+#define REG_MOTOR_POLE_PAIRS_VALUE 7    //
 #define REG_MOTOR_SYNCHRO_VALUE 0       // deg
 #define REG_INV_PHASE_VALUE 0           // 0: NORMAL 1: INV
 #define REG_FIELD_WEAKENING_K_VALUE 255 // (1/)255 is minimum value, recommended around (1/)5
