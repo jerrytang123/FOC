@@ -2,7 +2,9 @@
 
 PID/FOC Custom Firmware for B-G431B-ESC1 board.
 
-Originally published by Patrick (https://hackaday.io/project/177578-b-g431b-esc-brushless-servo-controller), optimized by Jerry.
+Originally published by Patrick (https://hackaday.io/project/177578-b-g431b-esc-brushless-servo-controller).
+
+Optimized by Jerry.
 
 ## Characteristics
 
@@ -18,7 +20,7 @@ Originally published by Patrick (https://hackaday.io/project/177578-b-g431b-esc-
 - [x] Temperature monitoring, with fail-safe on maximum temprature (user configurable) 
 - [x] GUI Tool for configuration and test
 
-# 1. Hardware (commercial off the shelf)
+# 1. Hardware
 
 ![alt text](https://github.com/pat92fr/FOC2/blob/main/00-Doc/00-Hardware/pf267025_m.jpg?raw=true)
 
