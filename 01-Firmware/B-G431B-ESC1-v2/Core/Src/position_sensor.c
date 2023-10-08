@@ -6,6 +6,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "position_sensor.h"
 #include "as5600.h"
 #include "as5048a.h"
@@ -44,6 +45,7 @@ typedef struct
 
 	int natural_direction;
 	int full_rotation_offset;
+	bool updating;
 
 } positionSensor_t;
 
@@ -94,7 +96,11 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
 
 		sensor->sensor_type = sensor_type;
+<<<<<<< Updated upstream
 		regs[REG_ENCODER_ERROR_COUNT] = 0;
+=======
+		sensor->updating = false;
+>>>>>>> Stashed changes
 
 		status = 1;
 		break;
@@ -200,23 +206,24 @@ void positionSensor_update(void)
 		sensor->last_angle = angle;
 		sensor->last_angle_data = angle_data;
 
-		// return the full angle
-		// (number of full rotations)*2PI + current sensor angle
-		sensor->angle_rad = ((float)angle / cpr) * M_2PI;
-		sensor->angle_deg = RADIANS_TO_DEGREES(sensor->angle_rad);
-
-		// velocity calculation
+		// angle and velocity calculation
+		float angle_rad = ((float)angle / cpr) * M_2PI;
+		float angle_deg = RADIANS_TO_DEGREES(angle_rad);
 		float alpha_velocity_sense = (float)delta_time_us / (ALPHA_VELOCITY_TIME_CONST_US + (float)delta_time_us);
-		sensor->velocity_rad = alpha_velocity_sense * ((sensor->angle_rad + full_rotation * M_2PI - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
-		sensor->velocity_deg = alpha_velocity_sense * ((sensor->angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
-		// sensor->velocity_rad = ((sensor->angle_rad - sensor->angle_prev_rad) / delta_time_us * 1000000.0f);
-		// sensor->velocity_deg = ((sensor->angle_deg - sensor->angle_prev_deg) / delta_time_us * 1000000.0f);
+		float velocity_rad = alpha_velocity_sense * ((angle_rad + full_rotation * M_2PI - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
+		float velocity_deg = alpha_velocity_sense * ((angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
+
+		// update global variables
+		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
+		sensor->angle_rad = angle_rad;
+		sensor->angle_deg = angle_deg;
+		sensor->velocity_rad = velocity_rad;
+		sensor->velocity_deg = velocity_deg;
 
 		// last angle
 		sensor->angle_prev_rad = sensor->angle_rad;
 		sensor->angle_prev_deg = sensor->angle_deg;
 
-		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
 		break;
 	}
 	default:
