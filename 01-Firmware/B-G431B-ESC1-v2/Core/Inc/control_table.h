@@ -150,6 +150,7 @@ extern "C"
 #define REG_FOC_FREQUENCY 0xAB                // 43
 #define REG_PID_FREQUENCY 0xAC                // 44
 #define REG_MLP_FREQUENCY 0xAD                // 45
+#define REG_ENCODER_ERROR_COUNT 0xAE          // 46
 
 // SW & HW ERROR
 #define REG_PROTOCOL_CRC_FAIL 0xB0     // 48

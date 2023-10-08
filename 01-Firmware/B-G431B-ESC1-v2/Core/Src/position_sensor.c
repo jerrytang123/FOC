@@ -94,6 +94,7 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
 
 		sensor->sensor_type = sensor_type;
+		regs[REG_ENCODER_ERROR_COUNT] = 0;
 
 		status = 1;
 		break;
@@ -168,6 +169,7 @@ void positionSensor_update(void)
 		{
 			// set encoder error
 			regs[REG_HARDWARE_ERROR_STATUS] |= 1UL << HW_ERROR_BIT_POSITION_SENSOR_STATUS_ERROR;
+			regs[REG_ENCODER_ERROR_COUNT]++;
 			return;
 		}
 		else
