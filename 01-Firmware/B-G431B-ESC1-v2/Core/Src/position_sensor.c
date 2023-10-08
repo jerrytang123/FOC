@@ -96,11 +96,8 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
 
 		sensor->sensor_type = sensor_type;
-<<<<<<< Updated upstream
 		regs[REG_ENCODER_ERROR_COUNT] = 0;
-=======
 		sensor->updating = false;
->>>>>>> Stashed changes
 
 		status = 1;
 		break;
