@@ -166,9 +166,9 @@ void positionSensor_update(void)
 		HAL_StatusTypeDef status = AS5600_GetAngle(sensor->as5600Handle, &angle_data);
 		if (status != HAL_OK)
 		{
-			angle_data = sensor->last_angle_data;
 			// set encoder error
 			regs[REG_HARDWARE_ERROR_STATUS] |= 1UL << HW_ERROR_BIT_POSITION_SENSOR_STATUS_ERROR;
+			return;
 		}
 		else
 		{
