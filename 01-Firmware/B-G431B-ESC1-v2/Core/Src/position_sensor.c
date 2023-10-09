@@ -6,7 +6,6 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include "position_sensor.h"
 #include "as5600.h"
 #include "as5048a.h"
@@ -45,7 +44,7 @@ typedef struct
 
 	int natural_direction;
 	int full_rotation_offset;
-	bool updating;
+	int updating;
 
 } positionSensor_t;
 
@@ -96,8 +95,7 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
 
 		sensor->sensor_type = sensor_type;
-		regs[REG_ENCODER_ERROR_COUNT] = 0;
-		sensor->updating = false;
+		sensor->updating = 0;
 
 		status = 1;
 		break;
@@ -129,8 +127,7 @@ float positionSensor_getRadiansEstimation(uint16_t time_us)
 		{
 			delta_t_us = (time_us - sensor->lastUpdate);
 		}
-		// return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us) / 1000000.0f;
-		return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us + 800) / 1000000.0f; // Slow filter latency is 0.2ms
+		return sensor->angle_rad + sensor->velocity_rad * (float)(delta_t_us + 1200.0f) / 1000000.0f; // latency compensation
 	}
 	case AS5048A_PWM:
 		return API_AS5048A_Position_Sensor_Get_Radians_Estimation(time_us);
@@ -155,24 +152,12 @@ void positionSensor_update(void)
 		float d_angle;
 		uint16_t angle_data;
 
-		// calculate sample time
-		uint16_t now_us = __HAL_TIM_GET_COUNTER(&htim6);
-		if (now_us <= sensor->lastUpdate)
-		{
-			delta_time_us = 0xffff - sensor->lastUpdate + now_us;
-		}
-		else
-		{
-			delta_time_us = (now_us - sensor->lastUpdate);
-		}
-
 		// raw data from the sensor
 		HAL_StatusTypeDef status = AS5600_GetAngle(sensor->as5600Handle, &angle_data);
 		if (status != HAL_OK)
 		{
 			// set encoder error
 			regs[REG_HARDWARE_ERROR_STATUS] |= 1UL << HW_ERROR_BIT_POSITION_SENSOR_STATUS_ERROR;
-			regs[REG_ENCODER_ERROR_COUNT]++;
 			return;
 		}
 		else
@@ -203,6 +188,18 @@ void positionSensor_update(void)
 		sensor->last_angle = angle;
 		sensor->last_angle_data = angle_data;
 
+		// calculate sample time
+		uint16_t now_us = __HAL_TIM_GET_COUNTER(&htim6);
+		if (now_us <= sensor->lastUpdate)
+		{
+			delta_time_us = 0xffff - sensor->lastUpdate + now_us;
+		}
+		else
+		{
+			delta_time_us = (now_us - sensor->lastUpdate);
+		}
+		regs[REG_DEBUG] = delta_time_us;
+
 		// angle and velocity calculation
 		float angle_rad = ((float)angle / cpr) * M_2PI;
 		float angle_deg = RADIANS_TO_DEGREES(angle_rad);
@@ -211,11 +208,13 @@ void positionSensor_update(void)
 		float velocity_deg = alpha_velocity_sense * ((angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
 
 		// update global variables
-		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
+		sensor->updating = 1;
+		sensor->lastUpdate = now_us;
 		sensor->angle_rad = angle_rad;
 		sensor->angle_deg = angle_deg;
 		sensor->velocity_rad = velocity_rad;
 		sensor->velocity_deg = velocity_deg;
+		sensor->updating = 0;
 
 		// last angle
 		sensor->angle_prev_rad = sensor->angle_rad;

@@ -57,7 +57,7 @@ class ram_frame(LabelFrame):
 		self.gui_entry("FOC Frequency (Khz)", "foc_frequency", 0, False, True, False, 0xAB, 1, 1 )
 		self.gui_entry("PID Fequency (Khz)", "pid_frequency", 0, False, True, False, 0xAC, 1, 1 )
 		self.gui_entry("MLP Fequency (Khz)", "mlp_frequency", 0, False, True, False, 0xAD, 1, 1 )
-		self.gui_entry("Encoder Error Count", "encoder_error_count", 0, False, True, False, 0xAE, 1, 1 )
+		self.gui_entry("Debug", "debug", 0, False, True, False, 0xAE, 1, 1 )
 		self.gui_spacer("---")
 		self.gui_entry("Protocol CRC Fail", "protocol_crc_fail", 0, False, True, False, 0xB0, 1, 1 )
 		self.gui_entry("Hardware Error Status", "hardware_error_status", 0, False, True, False, 0xB1, 1, 1 )
@@ -236,7 +236,7 @@ class ram_frame(LabelFrame):
 				self.variables['foc_frequency_servo'].set(str(result[43]))
 				self.variables['pid_frequency_servo'].set(str(result[44]))
 				self.variables['mlp_frequency_servo'].set(str(result[45]))
-				self.variables['encoder_error_count_servo'].set(str(result[46]))
+				self.variables['debug_servo'].set(str(result[46]))
 
 				self.variables['protocol_crc_fail_servo'].set(str(result[48]))
 				#self.variables['hardware_error_status_servo'].set(str(result[49]))
