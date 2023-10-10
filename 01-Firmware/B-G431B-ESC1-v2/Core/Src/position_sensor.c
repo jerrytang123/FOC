@@ -14,6 +14,9 @@
 
 #define ALPHA_VELOCITY_TIME_CONST_US 10000.0f // low pass filter for velocity measurement
 
+int encoder_error_rate = 0;
+int encoder_error_counter = 0;
+
 extern I2C_HandleTypeDef hi2c1;
 extern TIM_HandleTypeDef htim4;
 
@@ -200,30 +203,38 @@ void positionSensor_update(void)
 		// angle and velocity calculation
 		float angle_rad = ((float)angle / cpr) * M_2PI;
 		float angle_deg = RADIANS_TO_DEGREES(angle_rad);
+		float velocity_rad_raw = (angle_rad + full_rotation * M_2PI - sensor->angle_rad) / delta_time_us * 1000000.0f;
+		float velocity_deg_raw = RADIANS_TO_DEGREES(velocity_rad_raw);
 		float alpha_velocity_sense = (float)delta_time_us / (ALPHA_VELOCITY_TIME_CONST_US + (float)delta_time_us);
-		float velocity_rad = alpha_velocity_sense * ((angle_rad + full_rotation * M_2PI - sensor->angle_prev_rad) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
-		float velocity_deg = alpha_velocity_sense * ((angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
+		float velocity_rad = alpha_velocity_sense * velocity_rad_raw + (1.0f - alpha_velocity_sense) * sensor->velocity_rad;
+		float velocity_deg = alpha_velocity_sense * velocity_deg_raw + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
+
+		// encoder noise detection
+		int sign_raw = (velocity_deg_raw > 0) - (velocity_deg_raw < 0);
+		int sign_filtered = (velocity_deg > 0) - (velocity_deg < 0);
+		// if the sign of the velocity is different, then the encoder is noisy
+		if (sign_raw != sign_filtered)
+		{
+			encoder_error_rate++;
+		}
+		encoder_error_counter++;
+		if (encoder_error_counter == 100)
+		{
+			regs[REG_DEBUG] = encoder_error_rate;
+			encoder_error_counter = 0;
+			encoder_error_rate = 0;
+		}
 
 		// update global variables
 		sensor->lastUpdate = now_us;
 		sensor->angle_rad = angle_rad;
 		sensor->angle_deg = angle_deg;
 		sensor->velocity_rad = velocity_rad;
-		// sensor->velocity_deg = velocity_deg;
-		sensor->velocity_deg = (angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f;
+		sensor->velocity_deg = velocity_deg;
 
 		// last angle
 		sensor->angle_prev_rad = sensor->angle_rad;
 		sensor->angle_prev_deg = sensor->angle_deg;
-
-		// encoder noise detection
-		int sign_raw = (velocity_deg > 0) - (velocity_deg < 0);
-		int sign_filtered = (sensor->velocity_deg > 0) - (sensor->velocity_deg < 0);
-		// if the sign of the velocity is different, then the encoder is noisy
-		if (sign_raw != sign_filtered)
-		{
-			regs[REG_DEBUG]++;
-		}
 
 		break;
 	}
