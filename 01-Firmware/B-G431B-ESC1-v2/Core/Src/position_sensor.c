@@ -44,7 +44,6 @@ typedef struct
 
 	int natural_direction;
 	int full_rotation_offset;
-	int updating;
 
 } positionSensor_t;
 
@@ -95,7 +94,6 @@ int positionSensor_init(e_sensor_type sensor_type)
 		sensor->lastUpdate = __HAL_TIM_GET_COUNTER(&htim6);
 
 		sensor->sensor_type = sensor_type;
-		sensor->updating = 0;
 
 		status = 1;
 		break;
@@ -198,7 +196,6 @@ void positionSensor_update(void)
 		{
 			delta_time_us = (now_us - sensor->lastUpdate);
 		}
-		regs[REG_DEBUG] = delta_time_us;
 
 		// angle and velocity calculation
 		float angle_rad = ((float)angle / cpr) * M_2PI;
@@ -208,17 +205,23 @@ void positionSensor_update(void)
 		float velocity_deg = alpha_velocity_sense * ((angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f) + (1.0f - alpha_velocity_sense) * sensor->velocity_deg;
 
 		// update global variables
-		sensor->updating = 1;
 		sensor->lastUpdate = now_us;
 		sensor->angle_rad = angle_rad;
 		sensor->angle_deg = angle_deg;
 		sensor->velocity_rad = velocity_rad;
-		sensor->velocity_deg = velocity_deg;
-		sensor->updating = 0;
+		// sensor->velocity_deg = velocity_deg;
+		sensor->velocity_deg = (angle_deg + full_rotation * 360.0f - sensor->angle_prev_deg) / delta_time_us * 1000000.0f;
 
 		// last angle
 		sensor->angle_prev_rad = sensor->angle_rad;
 		sensor->angle_prev_deg = sensor->angle_deg;
+
+		// time step inconsistency detection
+		uint16_t error_delta_time_us = abs(delta_time_us - 250);
+		if (error_delta_time_us > 50)
+		{
+			regs[REG_DEBUG]++;
+		}
 
 		break;
 	}
