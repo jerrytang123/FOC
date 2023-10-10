@@ -216,9 +216,11 @@ void positionSensor_update(void)
 		sensor->angle_prev_rad = sensor->angle_rad;
 		sensor->angle_prev_deg = sensor->angle_deg;
 
-		// time step inconsistency detection
-		uint16_t error_delta_time_us = abs(delta_time_us - 250);
-		if (error_delta_time_us > 50)
+		// encoder noise detection
+		int sign_raw = (velocity_deg > 0) - (velocity_deg < 0);
+		int sign_filtered = (sensor->velocity_deg > 0) - (sensor->velocity_deg < 0);
+		// if the sign of the velocity is different, then the encoder is noisy
+		if (sign_raw != sign_filtered)
 		{
 			regs[REG_DEBUG]++;
 		}
