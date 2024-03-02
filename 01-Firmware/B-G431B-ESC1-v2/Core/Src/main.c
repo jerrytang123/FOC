@@ -288,6 +288,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
                             regs[REG_GOAL_TORQUE_CURRENT_MA_H] = RxData[5];
                             regs[REG_GOAL_POS_KP] = RxData[6];
                             regs[REG_GOAL_POS_KD] = RxData[7];
+                            regs[REG_GOAL_VEL_KP] = RxData[7];
                             // HAL_Serial_Print(&serial,"CAN (8)\n");
                         }
                     }
